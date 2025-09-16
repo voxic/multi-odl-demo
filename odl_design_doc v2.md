@@ -1,8 +1,8 @@
-# Operational Data Lake (ODL) with MongoDB Atlas - Design Document
+# Operational Data Layer (ODL) with MongoDB Atlas - Design Document
 
 ## Executive Summary
 
-This document outlines the design for a demo Operational Data Lake using MongoDB Atlas as the target data platform. The architecture demonstrates real-time data synchronization from a MySQL operational system through Kafka-based CDC to multiple MongoDB Atlas clusters, showcasing data transformation and tiered storage patterns.
+This document outlines the design for a demo Operational Data Layer using MongoDB Atlas as the target data platform. The architecture demonstrates real-time data synchronization from a MySQL operational system through Kafka-based CDC to multiple MongoDB Atlas clusters, showcasing data transformation and tiered storage patterns.
 
 ## Architecture Overview
 

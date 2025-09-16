@@ -1,6 +1,6 @@
-# Operational Data Lake (ODL) Demo
+# Operational Data Layer (ODL) Demo
 
-This repository contains a complete demo of an Operational Data Lake using MongoDB Atlas as the target data platform. The architecture demonstrates real-time data synchronization from a MySQL operational system through Kafka-based CDC to multiple MongoDB Atlas clusters.
+This repository contains a complete demo of an Operational Data Layer using MongoDB Atlas as the target data platform. The architecture demonstrates real-time data synchronization from a MySQL operational system through Kafka-based CDC to multiple MongoDB Atlas clusters.
 
 ## Architecture Overview
 
