@@ -1,0 +1,24 @@
+{
+  "name": "mongodb-atlas-connector",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "tasks.max": "1",
+    "topics": "mysql.inventory.customers,mysql.inventory.accounts,mysql.inventory.transactions,mysql.inventory.agreements",
+    "connection.uri": "mongodb+srv://odl-writer:${env:MONGO_PASSWORD}@cluster1.mongodb.net/banking?retryWrites=true&w=majority",
+    "database": "banking",
+    "collection": "customers",
+    "document.id.strategy": "com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy",
+    "document.id.strategy.partial.value.projection.list": "customer_id",
+    "document.id.strategy.partial.value.projection.type": "AllowList",
+    "writemodel.strategy": "com.mongodb.kafka.connect.sink.writemodel.strategy.ReplaceOneBusinessKeyStrategy",
+    "writemodel.strategy.replace.one.filter.field.name": "customer_id",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "mysql.inventory.(.*)",
+    "transforms.route.replacement": "$1"
+  }
+}

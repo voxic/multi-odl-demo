@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-scripts
+data:
+  01-create-schema.sql: |
+    -- Create the banking database schema
+    USE banking;
+    
+    -- Create customers table
+    CREATE TABLE customers (
+        customer_id INT PRIMARY KEY AUTO_INCREMENT,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        phone VARCHAR(20),
+        date_of_birth DATE,
+        address_line1 VARCHAR(255),
+        address_line2 VARCHAR(255),
+        city VARCHAR(100),
+        state VARCHAR(50),
+        postal_code VARCHAR(20),
+        country VARCHAR(50),
+        customer_status ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED'),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    );
+    
+    -- Create accounts table
+    CREATE TABLE accounts (
+        account_id INT PRIMARY KEY AUTO_INCREMENT,
+        customer_id INT NOT NULL,
+        account_number VARCHAR(20) UNIQUE NOT NULL,
+        account_type ENUM('CHECKING', 'SAVINGS', 'CREDIT', 'LOAN'),
+        balance DECIMAL(15,2) DEFAULT 0.00,
+        currency VARCHAR(3) DEFAULT 'USD',
+        account_status ENUM('ACTIVE', 'CLOSED', 'FROZEN'),
+        interest_rate DECIMAL(5,4),
+        credit_limit DECIMAL(15,2),
+        opened_date DATE NOT NULL,
+        closed_date DATE NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+    );
+    
+    -- Create transactions table
+    CREATE TABLE transactions (
+        transaction_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        account_id INT NOT NULL,
+        transaction_type ENUM('DEPOSIT', 'WITHDRAWAL', 'TRANSFER_IN', 'TRANSFER_OUT', 'PAYMENT', 'FEE'),
+        amount DECIMAL(15,2) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'USD',
+        description VARCHAR(500),
+        reference_number VARCHAR(50),
+        counterparty_account VARCHAR(20),
+        transaction_date DATETIME NOT NULL,
+        posted_date DATETIME,
+        status ENUM('PENDING', 'COMPLETED', 'FAILED', 'REVERSED'),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (account_id) REFERENCES accounts(account_id),
+        INDEX idx_account_date (account_id, transaction_date),
+        INDEX idx_transaction_date (transaction_date),
+        INDEX idx_status (status)
+    );
+    
+    -- Create agreements table
+    CREATE TABLE agreements (
+        agreement_id INT PRIMARY KEY AUTO_INCREMENT,
+        customer_id INT NOT NULL,
+        account_id INT,
+        agreement_type ENUM('LOAN', 'CREDIT_CARD', 'OVERDRAFT', 'INVESTMENT'),
+        agreement_number VARCHAR(50) UNIQUE NOT NULL,
+        principal_amount DECIMAL(15,2),
+        current_balance DECIMAL(15,2),
+        interest_rate DECIMAL(5,4),
+        term_months INT,
+        payment_amount DECIMAL(15,2),
+        payment_frequency ENUM('MONTHLY', 'QUARTERLY', 'ANNUALLY'),
+        start_date DATE NOT NULL,
+        end_date DATE,
+        status ENUM('ACTIVE', 'COMPLETED', 'DEFAULT', 'CANCELLED'),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+        FOREIGN KEY (account_id) REFERENCES accounts(account_id)
+    );
+    
+    -- Create indexes for better performance
+    CREATE INDEX idx_customers_email ON customers(email);
+    CREATE INDEX idx_customers_status ON customers(customer_status);
+    CREATE INDEX idx_accounts_customer ON accounts(customer_id);
+    CREATE INDEX idx_accounts_number ON accounts(account_number);
+    CREATE INDEX idx_accounts_status ON accounts(account_status);
+    CREATE INDEX idx_agreements_customer ON agreements(customer_id);
+    CREATE INDEX idx_agreements_status ON agreements(status);

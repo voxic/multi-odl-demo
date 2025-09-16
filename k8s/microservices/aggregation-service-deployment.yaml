@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregation-service
+  labels:
+    app: aggregation-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aggregation-service
+  template:
+    metadata:
+      labels:
+        app: aggregation-service
+    spec:
+      containers:
+      - name: aggregation-service
+        image: node:18-alpine
+        ports:
+        - containerPort: 3000
+        env:
+        - name: CLUSTER1_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: cluster1-uri
+        - name: CLUSTER2_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: cluster2-uri
+        - name: PORT
+          value: "3000"
+        workingDir: /app
+        command: ["sh", "-c"]
+        args:
+        - |
+          apk add --no-cache git
+          git clone https://github.com/your-repo/odl-demo.git /tmp/repo
+          cp -r /tmp/repo/microservices/aggregation-service/* /app/
+          npm install
+          npm start
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aggregation-service
+spec:
+  selector:
+    app: aggregation-service
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secrets
+type: Opaque
+stringData:
+  cluster1-uri: "mongodb+srv://odl-reader:YOUR_PASSWORD@cluster1.mongodb.net/banking?retryWrites=true&w=majority"
+  cluster2-uri: "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster2.mongodb.net/analytics?retryWrites=true&w=majority"

@@ -1,0 +1,30 @@
+{
+  "name": "mysql-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+    "tasks.max": "1",
+    "database.hostname": "mysql-service",
+    "database.port": "3306",
+    "database.user": "odl_user",
+    "database.password": "odl_password",
+    "database.server.id": "184054",
+    "database.server.name": "mysql",
+    "database.include.list": "banking",
+    "database.history.kafka.bootstrap.servers": "kafka-service:9092",
+    "database.history.kafka.topic": "mysql.history",
+    "database.history.kafka.recovery.polling.interval.ms": "5000",
+    "database.history.kafka.recovery.polling.interval.max.ms": "30000",
+    "include.schema.changes": "true",
+    "snapshot.mode": "initial",
+    "snapshot.locking.mode": "minimal",
+    "table.include.list": "banking.customers,banking.accounts,banking.transactions,banking.agreements",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "mysql.banking.(.*)",
+    "transforms.route.replacement": "mysql.inventory.$1",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false"
+  }
+}

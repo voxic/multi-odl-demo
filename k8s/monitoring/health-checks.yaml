@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-check-script
+  namespace: odl-demo
+data:
+  health-check.sh: |
+    #!/bin/bash
+    
+    # Health check script for ODL Demo
+    echo "=== ODL Demo Health Check ==="
+    echo "Timestamp: $(date)"
+    echo ""
+    
+    # Check MySQL
+    echo "🔍 Checking MySQL..."
+    if kubectl get pod -l app=mysql -n odl-demo | grep -q Running; then
+      echo "✅ MySQL: Running"
+    else
+      echo "❌ MySQL: Not running"
+    fi
+    
+    # Check Kafka
+    echo "🔍 Checking Kafka..."
+    if kubectl get pod -l app=kafka -n odl-demo | grep -q Running; then
+      echo "✅ Kafka: Running"
+    else
+      echo "❌ Kafka: Not running"
+    fi
+    
+    # Check Zookeeper
+    echo "🔍 Checking Zookeeper..."
+    if kubectl get pod -l app=zookeeper -n odl-demo | grep -q Running; then
+      echo "✅ Zookeeper: Running"
+    else
+      echo "❌ Zookeeper: Not running"
+    fi
+    
+    # Check Kafka Connect
+    echo "🔍 Checking Kafka Connect..."
+    if kubectl get pod -l app=kafka-connect -n odl-demo | grep -q Running; then
+      echo "✅ Kafka Connect: Running"
+    else
+      echo "❌ Kafka Connect: Not running"
+    fi
+    
+    # Check Aggregation Service
+    echo "🔍 Checking Aggregation Service..."
+    if kubectl get pod -l app=aggregation-service -n odl-demo | grep -q Running; then
+      echo "✅ Aggregation Service: Running"
+    else
+      echo "❌ Aggregation Service: Not running"
+    fi
+    
+    # Check Kafka Connect API
+    echo "🔍 Checking Kafka Connect API..."
+    KAFKA_CONNECT_IP=$(kubectl get service kafka-connect-service -n odl-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    if [ -n "$KAFKA_CONNECT_IP" ]; then
+      if curl -s http://$KAFKA_CONNECT_IP:8083/connectors > /dev/null; then
+        echo "✅ Kafka Connect API: Accessible"
+      else
+        echo "❌ Kafka Connect API: Not accessible"
+      fi
+    else
+      echo "⚠️  Kafka Connect API: No external IP (use port-forward)"
+    fi
+    
+    # Check Aggregation Service API
+    echo "🔍 Checking Aggregation Service API..."
+    AGG_SERVICE_IP=$(kubectl get service aggregation-service -n odl-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    if [ -n "$AGG_SERVICE_IP" ]; then
+      if curl -s http://$AGG_SERVICE_IP:3000/health > /dev/null; then
+        echo "✅ Aggregation Service API: Accessible"
+      else
+        echo "❌ Aggregation Service API: Not accessible"
+      fi
+    else
+      echo "⚠️  Aggregation Service API: No external IP (use port-forward)"
+    fi
+    
+    echo ""
+    echo "=== End Health Check ==="
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: health-check-cronjob
+  namespace: odl-demo
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: health-check
+            image: bitnami/kubectl:latest
+            command: ["/bin/bash", "/scripts/health-check.sh"]
+            volumeMounts:
+            - name: health-check-script
+              mountPath: /scripts
+          volumes:
+          - name: health-check-script
+            configMap:
+              name: health-check-script
+              defaultMode: 0755
+          restartPolicy: OnFailure
