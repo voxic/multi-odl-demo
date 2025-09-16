@@ -26,6 +26,109 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - curl
 - Node.js 18+ (for local development)
 
+### MicroK8s Setup on Ubuntu 24.04
+
+#### 1. Install MicroK8s
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install MicroK8s
+sudo snap install microk8s --classic
+
+# Add your user to the microk8s group
+sudo usermod -a -G microk8s $USER
+
+# Apply the group change (logout and login, or use newgrp)
+newgrp microk8s
+
+# Verify installation
+microk8s status --wait-ready
+```
+
+#### 2. Enable Required Add-ons
+```bash
+# Enable essential add-ons for the ODL demo
+microk8s enable dns
+microk8s enable storage
+microk8s enable ingress
+
+# Optional: Enable dashboard for monitoring
+microk8s enable dashboard
+
+# Check status
+microk8s status
+```
+
+#### 3. Configure kubectl
+```bash
+# Create kubectl config directory
+mkdir -p ~/.kube
+
+# Copy MicroK8s config to kubectl
+microk8s config > ~/.kube/config
+
+# Verify kubectl works
+kubectl get nodes
+kubectl get pods -A
+```
+
+#### 4. Configure Resource Limits (Important for Demo)
+```bash
+# Check available resources
+microk8s kubectl top nodes
+
+# If needed, increase MicroK8s resource limits
+sudo snap set microk8s memory=4G
+sudo snap set microk8s cpu=4
+
+# Restart MicroK8s to apply changes
+sudo snap restart microk8s
+```
+
+#### 5. Verify Setup
+```bash
+# Check all services are running
+microk8s status
+
+# Test with a simple deployment
+kubectl run nginx --image=nginx --port=80
+kubectl expose pod nginx --port=80 --type=NodePort
+kubectl get pods,services
+
+# Clean up test
+kubectl delete pod nginx
+kubectl delete service nginx
+```
+
+#### 6. Troubleshooting MicroK8s
+
+**If MicroK8s fails to start:**
+```bash
+# Check MicroK8s logs
+sudo journalctl -u snap.microk8s.daemon-apiserver
+sudo journalctl -u snap.microk8s.daemon-kubelet
+
+# Reset MicroK8s if needed (WARNING: This removes all data)
+microk8s reset
+```
+
+**If pods are stuck in Pending state:**
+```bash
+# Check node resources
+kubectl describe nodes
+
+# Check if storage is available
+kubectl get storageclass
+```
+
+**If DNS issues occur:**
+```bash
+# Restart DNS add-on
+microk8s disable dns
+microk8s enable dns
+```
+
 ### MongoDB Atlas Setup
 1. Create two MongoDB Atlas clusters:
    - **Cluster 1**: M10 tier (or higher) for primary ODL
