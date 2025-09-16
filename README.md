@@ -146,6 +146,7 @@ microk8s enable dns
    - `odl-writer` (readWrite access to both clusters)
 3. Whitelist your VM's public IP address
 4. Get connection strings for both clusters
+5. **Important**: Note down the `odl-writer` password as it will be needed for the Kafka Connect MongoDB Atlas connector configuration
 
 ### VM Requirements
 - CPU: 4 cores minimum
@@ -170,18 +171,78 @@ stringData:
   cluster2-uri: "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster2.mongodb.net/analytics?retryWrites=true&w=majority"
 ```
 
-### 3. Deploy Everything
+### 3. Configure Kafka Connect Connectors
+
+#### 3.1 Update Debezium MySQL Connector
+The MySQL connector is pre-configured in `k8s/connectors/debezium-mysql-connector.json` and should work with the default MySQL deployment. No changes needed unless you're using custom MySQL credentials.
+
+#### 3.2 Update MongoDB Atlas Connector
+Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`:
+
+```json
+{
+  "name": "mongodb-atlas-connector",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "tasks.max": "1",
+    "topics": "mysql.inventory.customers,mysql.inventory.accounts,mysql.inventory.transactions,mysql.inventory.agreements",
+    "connection.uri": "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster1.mongodb.net/banking?retryWrites=true&w=majority",
+    "database": "banking",
+    "collection": "customers",
+    "document.id.strategy": "com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy",
+    "document.id.strategy.partial.value.projection.list": "customer_id",
+    "document.id.strategy.partial.value.projection.type": "AllowList",
+    "writemodel.strategy": "com.mongodb.kafka.connect.sink.writemodel.strategy.ReplaceOneBusinessKeyStrategy",
+    "writemodel.strategy.replace.one.filter.field.name": "customer_id",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "mysql.inventory.(.*)",
+    "transforms.route.replacement": "$1"
+  }
+}
+```
+
+**Important**: Replace `YOUR_PASSWORD` with your actual MongoDB Atlas password for the `odl-writer` user.
+
+#### 3.3 Deploy Connectors
+After updating the connection strings, deploy the connectors:
+
+```bash
+# Wait for Kafka Connect to be ready
+kubectl wait --for=condition=ready pod -l app=kafka-connect -n odl-demo --timeout=300s
+
+# Deploy MySQL connector
+curl -X POST -H "Content-Type: application/json" \
+  --data @k8s/connectors/debezium-mysql-connector.json \
+  http://localhost:8083/connectors
+
+# Deploy MongoDB Atlas connector
+curl -X POST -H "Content-Type: application/json" \
+  --data @k8s/connectors/mongodb-atlas-connector.json \
+  http://localhost:8083/connectors
+
+# Verify connectors are running
+curl http://localhost:8083/connectors
+curl http://localhost:8083/connectors/mysql-connector/status
+curl http://localhost:8083/connectors/mongodb-atlas-connector/status
+```
+
+### 4. Deploy Everything
 ```bash
 ./scripts/deploy.sh
 ```
 
-### 4. Verify Deployment
+### 5. Verify Deployment
 ```bash
 kubectl get pods -n odl-demo
 kubectl get services -n odl-demo
 ```
 
-### 5. Access Services
+### 6. Access Services
 ```bash
 # MySQL
 kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
@@ -297,6 +358,24 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
    ```bash
    kubectl logs deployment/aggregation-service -n odl-demo
    curl http://localhost:3000/health
+   ```
+
+5. **Kafka Connect Connector Issues**
+   ```bash
+   # Check connector status
+   curl http://localhost:8083/connectors/mysql-connector/status
+   curl http://localhost:8083/connectors/mongodb-atlas-connector/status
+   
+   # Check connector logs
+   kubectl logs deployment/kafka-connect -n odl-demo
+   
+   # Restart connector if needed
+   curl -X POST http://localhost:8083/connectors/mysql-connector/restart
+   curl -X POST http://localhost:8083/connectors/mongodb-atlas-connector/restart
+   
+   # Delete and recreate connector if needed
+   curl -X DELETE http://localhost:8083/connectors/mysql-connector
+   curl -X DELETE http://localhost:8083/connectors/mongodb-atlas-connector
    ```
 
 ### Reset Everything
