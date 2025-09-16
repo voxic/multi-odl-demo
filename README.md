@@ -28,10 +28,18 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 
 ### MicroK8s Setup on Ubuntu 24.04
 
-#### 1. Install MicroK8s
+#### 1. Install MicroK8s and kubectl
 ```bash
 # Update system packages
 sudo apt update && sudo apt upgrade -y
+
+# Install kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm kubectl
+
+# Verify kubectl installation
+kubectl version --client
 
 # Install MicroK8s
 sudo snap install microk8s --classic
