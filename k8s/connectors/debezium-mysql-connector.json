@@ -15,6 +15,7 @@
     "database.history.kafka.topic": "mysql.history",
     "database.history.kafka.recovery.polling.interval.ms": "5000",
     "database.history.kafka.recovery.polling.interval.max.ms": "30000",
+    "database.history.kafka.recovery.attempts": "100",
     "include.schema.changes": "true",
     "snapshot.mode": "initial",
     "snapshot.locking.mode": "minimal",
