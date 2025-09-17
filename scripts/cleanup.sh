@@ -53,7 +53,7 @@ kubectl delete pvc mysql-pvc kafka-pvc zookeeper-pvc -n odl-demo --ignore-not-fo
 kubectl delete secret mysql-secret mongodb-secrets -n odl-demo --ignore-not-found=true
 
 # Delete configmaps
-kubectl delete configmap mysql-config mysql-init-scripts kafka-config zookeeper-config -n odl-demo --ignore-not-found=true
+kubectl delete configmap mysql-config mysql-init-scripts kafka-config zookeeper-config aggregation-source -n odl-demo --ignore-not-found=true
 
 # Delete namespace
 print_status "Deleting odl-demo namespace..."

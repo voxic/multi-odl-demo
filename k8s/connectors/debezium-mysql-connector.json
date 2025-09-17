@@ -9,6 +9,7 @@
     "database.password": "odl_password",
     "database.server.id": "184054",
     "database.server.name": "mysql",
+    "topic.prefix": "mysql",
     "database.include.list": "banking",
     "database.history.kafka.bootstrap.servers": "kafka-service:9092",
     "database.history.kafka.topic": "mysql.history",

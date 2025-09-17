@@ -14,6 +14,20 @@ spec:
       labels:
         app: kafka-connect
     spec:
+      initContainers:
+      - name: download-mongodb-connector
+        image: alpine:latest
+        command: 
+        - sh
+        - -c
+        - |
+          apk add --no-cache curl unzip
+          curl -L -o /tmp/mongodb-kafka-connect.zip https://github.com/mongodb/mongo-kafka/releases/download/r2.0.1/mongodb-kafka-connect-mongodb-2.0.1.zip
+          unzip /tmp/mongodb-kafka-connect.zip -d /tmp/
+          cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/* /kafka/connect/
+        volumeMounts:
+        - name: kafka-connect-plugins
+          mountPath: /kafka/connect
       containers:
       - name: kafka-connect
         image: debezium/connect:2.4
@@ -60,6 +74,9 @@ spec:
           value: "5000"
         - name: CONNECT_SHUTDOWN_TIMEOUT
           value: "10000"
+        volumeMounts:
+        - name: kafka-connect-plugins
+          mountPath: /kafka/connect
         resources:
           requests:
             memory: "512Mi"
@@ -79,6 +96,9 @@ spec:
             port: 8083
           initialDelaySeconds: 60
           periodSeconds: 30
+      volumes:
+      - name: kafka-connect-plugins
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
