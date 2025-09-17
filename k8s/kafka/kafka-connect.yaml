@@ -42,11 +42,15 @@ spec:
           ls -la /tmp/
           echo "Looking for Debezium connector directory:"
           find /tmp -name "*debezium*" -type d
+          echo "Contents of Debezium connector directory:"
+          ls -la /tmp/debezium-connector-mysql/
           echo "Looking for any lib directories:"
           find /tmp -name "lib" -type d
+          echo "Looking for JAR files in Debezium directory:"
+          find /tmp/debezium-connector-mysql -name "*.jar" -type f
           echo "Copying Debezium connector libraries..."
-          # Try to find and copy from any lib directory that contains debezium jars
-          find /tmp -name "lib" -type d -exec sh -c 'if ls "$1"/*debezium*.jar 1> /dev/null 2>&1; then echo "Found Debezium jars in $1"; cp "$1"/*.jar /kafka/connect/lib/; fi' _ {} \;
+          # Copy all JAR files from the Debezium connector directory
+          find /tmp/debezium-connector-mysql -name "*.jar" -type f -exec cp {} /kafka/connect/lib/ \;
           
           # Copy any config files
           if [ -d "/tmp/mongodb-kafka-connect-mongodb-2.0.1/config" ]; then
