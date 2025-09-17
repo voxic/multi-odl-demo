@@ -50,13 +50,33 @@ function decodeBase64Field(value) {
   if (typeof value === 'string' && value.length > 0) {
     try {
       // Try to decode as base64
-      const decoded = Buffer.from(value, 'base64').toString('utf-8');
-      // Check if it's a valid number
-      const num = parseFloat(decoded);
-      if (!isNaN(num)) {
-        return num;
+      const buffer = Buffer.from(value, 'base64');
+      
+      // Try to interpret as binary-encoded number
+      if (buffer.length === 1) {
+        // 8-bit integer
+        return buffer.readUInt8(0);
+      } else if (buffer.length === 2) {
+        // 16-bit integer
+        return buffer.readUInt16BE(0);
+      } else if (buffer.length === 3) {
+        // 3-byte case - treat as 16-bit integer from first 2 bytes
+        return buffer.readUInt16BE(0);
+      } else if (buffer.length === 4) {
+        // 32-bit integer
+        return buffer.readUInt32BE(0);
+      } else if (buffer.length === 8) {
+        // 64-bit integer
+        return Number(buffer.readBigUInt64BE(0));
+      } else {
+        // Try as text first
+        const decoded = buffer.toString('utf-8');
+        const num = parseFloat(decoded);
+        if (!isNaN(num)) {
+          return num;
+        }
+        return decoded;
       }
-      return decoded;
     } catch (error) {
       // If decoding fails, return original value
       return value;
