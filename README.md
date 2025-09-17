@@ -208,33 +208,12 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 
 **Important**: Replace `YOUR_PASSWORD` with your actual MongoDB Atlas password for the `odl-writer` user.
 
-#### 3.3 Deploy Connectors
-After updating the connection strings, deploy the connectors:
-
-```bash
-# Wait for Kafka Connect to be ready
-kubectl wait --for=condition=ready pod -l app=kafka-connect -n odl-demo --timeout=300s
-
-# Deploy MySQL connector
-curl -X POST -H "Content-Type: application/json" \
-  --data @k8s/connectors/debezium-mysql-connector.json \
-  http://localhost:8083/connectors
-
-# Deploy MongoDB Atlas connector
-curl -X POST -H "Content-Type: application/json" \
-  --data @k8s/connectors/mongodb-atlas-connector.json \
-  http://localhost:8083/connectors
-
-# Verify connectors are running
-curl http://localhost:8083/connectors
-curl http://localhost:8083/connectors/mysql-connector/status
-curl http://localhost:8083/connectors/mongodb-atlas-connector/status
-```
-
 ### 4. Deploy Everything
 ```bash
 ./scripts/deploy.sh
 ```
+
+**Note**: The deployment script automatically handles Kafka Connect connector deployment after Kafka Connect is ready. You don't need to manually deploy the connectors.
 
 ### 5. Verify Deployment
 ```bash
@@ -376,6 +355,15 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
    # Delete and recreate connector if needed
    curl -X DELETE http://localhost:8083/connectors/mysql-connector
    curl -X DELETE http://localhost:8083/connectors/mongodb-atlas-connector
+   
+   # Manually deploy connectors if automatic deployment failed
+   kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo &
+   curl -X POST -H "Content-Type: application/json" \
+     --data @k8s/connectors/debezium-mysql-connector.json \
+     http://localhost:8083/connectors
+   curl -X POST -H "Content-Type: application/json" \
+     --data @k8s/connectors/mongodb-atlas-connector.json \
+     http://localhost:8083/connectors
    ```
 
 ### Reset Everything
