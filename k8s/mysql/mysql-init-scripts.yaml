@@ -95,3 +95,32 @@ data:
     CREATE INDEX idx_accounts_status ON accounts(account_status);
     CREATE INDEX idx_agreements_customer ON agreements(customer_id);
     CREATE INDEX idx_agreements_status ON agreements(status);
+    
+    -- Insert sample data
+    INSERT INTO customers (first_name, last_name, email, phone, customer_status) VALUES
+    ('John', 'Doe', 'john.doe@example.com', '+1-555-0101', 'ACTIVE'),
+    ('Jane', 'Smith', 'jane.smith@example.com', '+1-555-0102', 'ACTIVE'),
+    ('Bob', 'Johnson', 'bob.johnson@example.com', '+1-555-0103', 'INACTIVE');
+    
+    INSERT INTO accounts (customer_id, account_number, account_type, balance, account_status, opened_date) VALUES
+    (1, 'ACC001', 'CHECKING', 1500.00, 'ACTIVE', '2024-01-15'),
+    (1, 'ACC002', 'SAVINGS', 5000.00, 'ACTIVE', '2024-01-15'),
+    (2, 'ACC003', 'CHECKING', 2500.00, 'ACTIVE', '2024-02-01'),
+    (3, 'ACC004', 'CREDIT', -500.00, 'ACTIVE', '2024-02-15');
+    
+    INSERT INTO transactions (account_id, transaction_type, amount, description, transaction_date, status) VALUES
+    (1, 'DEPOSIT', 1000.00, 'Initial deposit', '2024-01-15 10:00:00', 'COMPLETED'),
+    (1, 'WITHDRAWAL', 200.00, 'ATM withdrawal', '2024-01-20 14:30:00', 'COMPLETED'),
+    (2, 'DEPOSIT', 5000.00, 'Savings deposit', '2024-01-15 10:05:00', 'COMPLETED'),
+    (3, 'DEPOSIT', 3000.00, 'Initial deposit', '2024-02-01 09:00:00', 'COMPLETED');
+    
+    INSERT INTO agreements (customer_id, account_id, agreement_type, agreement_number, principal_amount, current_balance, interest_rate, term_months, status, start_date) VALUES
+    (1, 2, 'LOAN', 'LOAN001', 10000.00, 8500.00, 0.0450, 24, 'ACTIVE', '2024-01-15'),
+    (3, 4, 'CREDIT_CARD', 'CC001', 5000.00, 500.00, 0.1899, 0, 'ACTIVE', '2024-02-15');
+  02-grant-privileges.sql: |
+    -- Grant required privileges to odl_user for Debezium
+    GRANT RELOAD, FLUSH_TABLES ON *.* TO 'odl_user'@'%';
+    GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'odl_user'@'%';
+    GRANT SELECT ON banking.* TO 'odl_user'@'%';
+    GRANT SHOW DATABASES ON *.* TO 'odl_user'@'%';
+    FLUSH PRIVILEGES;
