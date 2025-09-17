@@ -36,16 +36,23 @@ spec:
           # Download Debezium MySQL connector plugin archive
           echo "Downloading Debezium MySQL connector..."
           curl -L -o /tmp/debezium-mysql-connector.tar.gz https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/2.4.1.Final/debezium-connector-mysql-2.4.1.Final-plugin.tar.gz
+          echo "Extracting Debezium connector..."
           tar -xzf /tmp/debezium-mysql-connector.tar.gz -C /tmp/
-          cp -r /tmp/debezium-connector-mysql/lib/* /kafka/connect/lib/
+          echo "Contents of /tmp after extraction:"
+          ls -la /tmp/
+          echo "Looking for Debezium connector directory:"
+          find /tmp -name "*debezium*" -type d
+          echo "Looking for any lib directories:"
+          find /tmp -name "lib" -type d
+          echo "Copying Debezium connector libraries..."
+          # Try to find and copy from any lib directory that contains debezium jars
+          find /tmp -name "lib" -type d -exec sh -c 'if ls "$1"/*debezium*.jar 1> /dev/null 2>&1; then echo "Found Debezium jars in $1"; cp "$1"/*.jar /kafka/connect/lib/; fi' _ {} \;
           
           # Copy any config files
           if [ -d "/tmp/mongodb-kafka-connect-mongodb-2.0.1/config" ]; then
             cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/config/* /kafka/connect/config/
           fi
-          if [ -d "/tmp/debezium-connector-mysql/config" ]; then
-            cp -r /tmp/debezium-connector-mysql/config/* /kafka/connect/config/
-          fi
+          find /tmp -name "config" -type d -exec sh -c 'if ls "$1"/*debezium* 1> /dev/null 2>&1; then echo "Found Debezium config in $1"; cp -r "$1"/* /kafka/connect/config/; fi' _ {} \;
           
           echo "Installed connectors:"
           ls -la /kafka/connect/lib/
