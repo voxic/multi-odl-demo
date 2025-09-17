@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🚀 Starting ODL Demo Deployment..."
+echo "[$(get_timestamp)] 🚀 Starting ODL Demo Deployment..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -13,17 +13,22 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
+# Function to get current timestamp
+get_timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+# Function to print colored output with timestamps
 print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[$(get_timestamp)] [INFO]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[$(get_timestamp)] [WARNING]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[$(get_timestamp)] [ERROR]${NC} $1"
 }
 
 # Check if kubectl is available
@@ -166,15 +171,15 @@ print_status "🎉 Deployment completed successfully!"
 # Display service information
 echo ""
 print_status "Service Information:"
-echo "MySQL: kubectl port-forward service/mysql-service 3306:3306 -n odl-demo"
-echo "Kafka: kubectl port-forward service/kafka-service 9092:9092 -n odl-demo"
-echo "Kafka Connect: kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo"
-echo "Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
+echo "[$(get_timestamp)] MySQL: kubectl port-forward service/mysql-service 3306:3306 -n odl-demo"
+echo "[$(get_timestamp)] Kafka: kubectl port-forward service/kafka-service 9092:9092 -n odl-demo"
+echo "[$(get_timestamp)] Kafka Connect: kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo"
+echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
 
 echo ""
 print_status "To check the status of all pods:"
-echo "kubectl get pods -n odl-demo"
+echo "[$(get_timestamp)] kubectl get pods -n odl-demo"
 
 echo ""
 print_status "To view logs:"
-echo "kubectl logs -f deployment/aggregation-service -n odl-demo"
+echo "[$(get_timestamp)] kubectl logs -f deployment/aggregation-service -n odl-demo"
