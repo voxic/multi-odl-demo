@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, Long } = require('mongodb');
 require('dotenv').config();
 
 // Test script to verify the aggregation service works with Debezium CDC data

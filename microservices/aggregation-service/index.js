@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, Long } = require('mongodb');
 const express = require('express');
 const winston = require('winston');
 require('dotenv').config();
@@ -121,6 +121,18 @@ function extractDataFromCDC(cdcEvent) {
   return cdcEvent.after;
 }
 
+// Helper function to get customer ID from CDC data
+function getCustomerIdFromCDC(cdcEvent) {
+  if (!cdcEvent || !cdcEvent.after) return null;
+  return safeNumber(cdcEvent.after.customer_id);
+}
+
+// Helper function to get account ID from CDC data
+function getAccountIdFromCDC(cdcEvent) {
+  if (!cdcEvent || !cdcEvent.after) return null;
+  return safeNumber(cdcEvent.after.account_id);
+}
+
 // Aggregate customer data from Cluster 1 to Cluster 2
 async function aggregateCustomerData(customerId) {
   try {
@@ -129,7 +141,7 @@ async function aggregateCustomerData(customerId) {
     
     // Get customer data from CDC events
     const customerCDC = await db1.collection('customers').findOne({ 
-      'after.customer_id': { $numberLong: customerId.toString() } 
+      'after.customer_id': Long.fromString(customerId.toString()) 
     });
     
     if (!customerCDC) {
@@ -147,14 +159,14 @@ async function aggregateCustomerData(customerId) {
     
     // Get customer accounts from CDC events
     const accountsCDC = await db1.collection('accounts').find({ 
-      'after.customer_id': { $numberLong: customerId.toString() } 
+      'after.customer_id': Long.fromString(customerId.toString()) 
     }).toArray();
     
     const accounts = accountsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
     
     // Get customer agreements from CDC events
     const agreementsCDC = await db1.collection('agreements').find({ 
-      'after.customer_id': { $numberLong: customerId.toString() } 
+      'after.customer_id': Long.fromString(customerId.toString()) 
     }).toArray();
     
     const agreements = agreementsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
@@ -163,11 +175,11 @@ async function aggregateCustomerData(customerId) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const accountIds = accounts.map(acc => ({ $numberLong: acc.account_id.toString() }));
+    const accountIds = accounts.map(acc => Long.fromString(acc.account_id.toString()));
     const transactionsCDC = await db1.collection('transactions').find({
       'after.account_id': { $in: accountIds },
       'after.transaction_date': { 
-        $gte: { $numberLong: thirtyDaysAgo.getTime().toString() }
+        $gte: Long.fromNumber(thirtyDaysAgo.getTime())
       }
     }).toArray();
     
@@ -355,7 +367,7 @@ async function setupChangeStreams() {
         if (transaction && transaction.account_id) {
           // Find the customer for this account
           const accountCDC = await db1.collection('accounts').findOne({ 
-            'after.account_id': { $numberLong: transaction.account_id.toString() } 
+            'after.account_id': Long.fromString(transaction.account_id.toString()) 
           });
           if (accountCDC) {
             const account = extractDataFromCDC(accountCDC);
