@@ -110,6 +110,12 @@ spec:
           value: "5000"
         - name: CONNECT_SHUTDOWN_TIMEOUT
           value: "10000"
+        - name: CONNECT_TOPIC_CREATION_ENABLE
+          value: "true"
+        - name: CONNECT_TOPIC_CREATION_DEFAULT_REPLICATION_FACTOR
+          value: "1"
+        - name: CONNECT_TOPIC_CREATION_DEFAULT_PARTITIONS
+          value: "1"
         volumeMounts:
         - name: kafka-connect-plugins
           mountPath: /kafka/connect
