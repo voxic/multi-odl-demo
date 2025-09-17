@@ -15,16 +15,38 @@ spec:
         app: kafka-connect
     spec:
       initContainers:
-      - name: download-mongodb-connector
+      - name: download-connectors
         image: alpine:latest
         command: 
         - sh
         - -c
         - |
           apk add --no-cache curl unzip
+          # Download MongoDB connector
           curl -L -o /tmp/mongodb-kafka-connect.zip https://github.com/mongodb/mongo-kafka/releases/download/r2.0.1/mongodb-kafka-connect-mongodb-2.0.1.zip
           unzip /tmp/mongodb-kafka-connect.zip -d /tmp/
-          cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/* /kafka/connect/
+          
+          # Download Debezium MySQL connector
+          curl -L -o /tmp/debezium-mysql-connector.tar.gz https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/2.4.0.Final/debezium-connector-mysql-2.4.0.Final-plugin.tar.gz
+          tar -xzf /tmp/debezium-mysql-connector.tar.gz -C /tmp/
+          
+          # Create the plugins directory structure
+          mkdir -p /kafka/connect/lib
+          mkdir -p /kafka/connect/config
+          
+          # Copy MongoDB connector
+          cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/lib/* /kafka/connect/lib/
+          
+          # Copy Debezium MySQL connector
+          cp -r /tmp/debezium-connector-mysql/lib/* /kafka/connect/lib/
+          
+          # Copy any config files if they exist
+          if [ -d "/tmp/mongodb-kafka-connect-mongodb-2.0.1/config" ]; then
+            cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/config/* /kafka/connect/config/
+          fi
+          if [ -d "/tmp/debezium-connector-mysql/config" ]; then
+            cp -r /tmp/debezium-connector-mysql/config/* /kafka/connect/config/
+          fi
         volumeMounts:
         - name: kafka-connect-plugins
           mountPath: /kafka/connect
@@ -53,7 +75,7 @@ spec:
         - name: CONNECT_REST_ADVERTISED_HOST_NAME
           value: "kafka-connect-service"
         - name: CONNECT_PLUGIN_PATH
-          value: "/kafka/connect"
+          value: "/kafka/connect,/kafka/connect/lib"
         - name: CONNECT_REST_HOST_NAME
           value: "0.0.0.0"
         - name: CONNECT_REST_PORT
