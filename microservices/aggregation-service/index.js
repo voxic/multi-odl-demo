@@ -94,6 +94,20 @@ function safeNumber(value, defaultValue = 0) {
     return parseInt(value.$numberLong);
   }
   
+  // Try parsing as regular number first
+  const num = parseFloat(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
+// Helper function to safely get base64-encoded numeric values from CDC data
+function safeBase64Number(value, defaultValue = 0) {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Handle NumberLong objects
+  if (typeof value === 'object' && value.$numberLong) {
+    return parseInt(value.$numberLong);
+  }
+  
   // Handle base64 encoded values
   if (typeof value === 'string') {
     const decoded = decodeBase64Field(value);
@@ -109,10 +123,9 @@ function safeNumber(value, defaultValue = 0) {
 function safeString(value, defaultValue = '') {
   if (value === null || value === undefined) return defaultValue;
   
-  // Handle base64 encoded values
+  // Return string values as-is (don't decode base64 for text fields)
   if (typeof value === 'string') {
-    const decoded = decodeBase64Field(value);
-    return decoded;
+    return value;
   }
   
   return String(value);
@@ -206,7 +219,7 @@ async function aggregateCustomerData(customerId) {
     const transactions = transactionsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
     
     // Calculate aggregated data
-    const totalBalance = accounts.reduce((sum, acc) => sum + safeNumber(acc.balance), 0);
+    const totalBalance = accounts.reduce((sum, acc) => sum + safeBase64Number(acc.balance), 0);
     const accountTypes = [...new Set(accounts.map(acc => acc.account_type).filter(Boolean))];
     const avgMonthlyTransactions = Math.round(transactions.length / 1); // Simplified for demo
     
@@ -217,8 +230,8 @@ async function aggregateCustomerData(customerId) {
     // Calculate agreement metrics
     const totalAgreements = agreements.length;
     const activeAgreements = agreements.filter(agr => agr.status === 'ACTIVE').length;
-    const totalPrincipalAmount = agreements.reduce((sum, agr) => sum + safeNumber(agr.principal_amount), 0);
-    const totalCurrentBalance = agreements.reduce((sum, agr) => sum + safeNumber(agr.current_balance), 0);
+    const totalPrincipalAmount = agreements.reduce((sum, agr) => sum + safeBase64Number(agr.principal_amount), 0);
+    const totalCurrentBalance = agreements.reduce((sum, agr) => sum + safeBase64Number(agr.current_balance), 0);
     
     // Create analytics document
     const analyticsDoc = {
