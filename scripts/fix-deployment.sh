@@ -47,13 +47,13 @@ echo ""
 # Clean up failed deployments
 print_status "Cleaning up failed deployments..."
 
-# Delete failed pods
-kubectl delete pods -n $NAMESPACE -l app=kafka --force --grace-period=0 || true
-kubectl delete pods -n $NAMESPACE -l app=zookeeper --force --grace-period=0 || true
-kubectl delete pods -n $NAMESPACE -l app=kafka-connect --force --grace-period=0 || true
+# Delete failed pods and deployments
+kubectl delete deployment kafka -n $NAMESPACE --force --grace-period=0 || true
+kubectl delete deployment zookeeper -n $NAMESPACE --force --grace-period=0 || true
+kubectl delete deployment kafka-connect -n $NAMESPACE --force --grace-period=0 || true
 
-# Wait a moment for cleanup
-sleep 5
+# Wait for cleanup
+sleep 10
 
 print_status "Redeploying with fixed configuration..."
 

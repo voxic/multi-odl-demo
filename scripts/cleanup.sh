@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🧹 Starting ODL Demo Cleanup..."
+echo "[$(get_timestamp)] 🧹 Starting ODL Demo Cleanup..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -13,17 +13,22 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
+# Function to get current timestamp
+get_timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+# Function to print colored output with timestamps
 print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[$(get_timestamp)] [INFO]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[$(get_timestamp)] [WARNING]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[$(get_timestamp)] [ERROR]${NC} $1"
 }
 
 # Check if kubectl is available
