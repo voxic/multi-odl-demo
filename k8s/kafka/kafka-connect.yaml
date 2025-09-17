@@ -88,6 +88,7 @@ spec:
   selector:
     app: kafka-connect
   ports:
-  - port: 8083
+  - name: connect
+    port: 8083
     targetPort: 8083
   type: ClusterIP
