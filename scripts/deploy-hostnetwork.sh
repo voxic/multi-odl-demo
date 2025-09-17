@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# ODL Demo Deployment Script
-# This script deploys the entire ODL demo infrastructure
+# ODL Demo Deployment Script - Host Networking Version
+# This script deploys the entire ODL demo infrastructure using host networking
 
 set -e
 
-echo "[$(get_timestamp)] 🚀 Starting ODL Demo Deployment..."
+echo "[$(get_timestamp)] 🚀 Starting ODL Demo Deployment (Host Networking)..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -47,9 +47,9 @@ print_status "Kubernetes cluster is accessible"
 
 # Check if required files exist
 REQUIRED_FILES=(
-    "k8s/mysql/mysql-deployment.yaml"
+    "k8s/mysql/mysql-hostnetwork.yaml"
     "k8s/mysql/mysql-init-scripts.yaml"
-    "k8s/kafka/kafka-all-in-one.yaml"
+    "k8s/kafka/kafka-hostnetwork.yaml"
     "k8s/kafka/kafka-connect.yaml"
     "k8s/microservices/aggregation-service-deployment.yaml"
     "k8s/connectors/debezium-mysql-connector.json"
@@ -69,9 +69,9 @@ print_status "All required files found"
 print_status "Creating namespace 'odl-demo'..."
 kubectl create namespace odl-demo --dry-run=client -o yaml | kubectl apply -f -
 
-# Deploy MySQL
-print_status "Deploying MySQL..."
-kubectl apply -f k8s/mysql/mysql-deployment.yaml -n odl-demo
+# Deploy MySQL with host networking
+print_status "Deploying MySQL with host networking..."
+kubectl apply -f k8s/mysql/mysql-hostnetwork.yaml -n odl-demo
 kubectl apply -f k8s/mysql/mysql-init-scripts.yaml -n odl-demo
 
 # Wait for MySQL to be ready
@@ -85,9 +85,9 @@ if ! kubectl wait --for=condition=available --timeout=300s deployment/mysql -n o
     exit 1
 fi
 
-# Deploy Kafka
-print_status "Deploying Kafka cluster..."
-kubectl apply -f k8s/kafka/kafka-all-in-one.yaml -n odl-demo
+# Deploy Kafka with host networking
+print_status "Deploying Kafka cluster with host networking..."
+kubectl apply -f k8s/kafka/kafka-hostnetwork.yaml -n odl-demo
 
 # Wait for Kafka to be ready
 print_status "Waiting for Kafka to be ready..."
@@ -178,67 +178,31 @@ kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: ap
 
 print_status "🎉 Deployment completed successfully!"
 
-# Setup Service Exposure (Default behavior)
-if [ "$1" != "--no-loadbalancer" ] && [ "$1" != "--port-forward" ]; then
-    echo ""
-    print_status "🌐 Setting up service exposure..."
-    
-    # Clean up any existing load balancer services
-    print_status "Cleaning up any existing load balancer services..."
-    kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer --ignore-not-found=true
-    kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer -n odl-demo --ignore-not-found=true
-    
-    # Apply NodePort services
-    print_status "Creating NodePort services..."
-    kubectl apply -f k8s/loadbalancer/mysql-nodeport.yaml
-    kubectl apply -f k8s/loadbalancer/kafka-ui-nodeport.yaml
-    
-    print_status "✅ NodePort services setup completed!"
+# Get VM IP
+VM_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null)
+if [ -z "$VM_IP" ]; then
+    VM_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
 fi
 
 # Display service information
 echo ""
-print_status "Service Information:"
-echo "[$(get_timestamp)] MySQL: kubectl port-forward service/mysql-service 3306:3306 -n odl-demo"
-echo "[$(get_timestamp)] Kafka: kubectl port-forward service/kafka-service 9092:9092 -n odl-demo"
+print_status "🎯 Host Networking Deployment Complete!"
+echo ""
+print_status "Services are now accessible on standard ports:"
+if [ -n "$VM_IP" ]; then
+    echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@$VM_IP:3306/banking"
+    echo "[$(get_timestamp)] Kafka UI: http://$VM_IP:8080"
+    echo "[$(get_timestamp)] Kafka: $VM_IP:9092"
+else
+    echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@localhost:3306/banking"
+    echo "[$(get_timestamp)] Kafka UI: http://localhost:8080"
+    echo "[$(get_timestamp)] Kafka: localhost:9092"
+fi
+
+echo ""
+print_status "Port Forwarding (for other services):"
 echo "[$(get_timestamp)] Kafka Connect: kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo"
 echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
-
-# Show service access information
-if [ "$1" != "--no-loadbalancer" ] && [ "$1" != "--port-forward" ]; then
-    echo ""
-    print_status "Service Access Options:"
-    echo ""
-    print_status "Option 1: NodePort Services (External Access)"
-    echo "[$(get_timestamp)] MySQL NodePort: kubectl get service mysql-nodeport -n odl-demo"
-    echo "[$(get_timestamp)] Kafka UI NodePort: kubectl get service kafka-ui-nodeport -n odl-demo"
-    
-    # Get node IP
-    NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null)
-    if [ -z "$NODE_IP" ]; then
-        NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
-    fi
-    
-    if [ -n "$NODE_IP" ]; then
-        echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@$NODE_IP:30306/banking"
-        echo "[$(get_timestamp)] Kafka UI: http://$NODE_IP:30080"
-    else
-        echo "[$(get_timestamp)] Node IP not found. Check with: kubectl get nodes -o wide"
-        echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@<NODE_IP>:30306/banking"
-        echo "[$(get_timestamp)] Kafka UI: http://<NODE_IP>:30080"
-    fi
-    
-    echo ""
-    print_status "Option 2: Port Forwarding (Standard Ports - Recommended)"
-    echo "[$(get_timestamp)] Run: ./scripts/port-forward.sh"
-    echo "[$(get_timestamp)] This will make services available on standard ports:"
-    echo "[$(get_timestamp)] MySQL: localhost:3306, Kafka UI: localhost:8080"
-else
-    echo ""
-    print_status "Port Forwarding Mode:"
-    echo "[$(get_timestamp)] NodePort services disabled. Using port forwarding for service access."
-    echo "[$(get_timestamp)] To enable NodePort services: ./scripts/deploy.sh"
-fi
 
 echo ""
 print_status "To check the status of all pods:"

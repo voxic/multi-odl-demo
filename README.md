@@ -7,7 +7,7 @@ This repository contains a complete demo of an Operational Data Layer using Mong
 ```
 MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary ODL) → MongoDB Atlas Cluster 2 (Analytics/Subset)
                     ↓
-            NodePort Services → External Access (MySQL: VM_IP:3306, Kafka UI: VM_IP:8080)
+            Host Networking → Direct Access (MySQL: VM_IP:3306, Kafka UI: VM_IP:8080)
 ```
 
 ### Key Components
@@ -18,7 +18,7 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - **Primary ODL**: MongoDB Atlas Cluster 1 (full dataset)
 - **Analytics Layer**: MongoDB Atlas Cluster 2 (transformed subset)
 - **Orchestration**: MicroK8s for container orchestration
-- **Service Exposure**: NodePort services for external access
+- **Service Exposure**: Host networking for direct access to standard ports
 - **Transformation Layer**: Node.js microservices for data processing
 - **Data Generation**: Python scripts for sample data creation
 
@@ -66,7 +66,7 @@ microk8s enable dns
 microk8s enable storage
 microk8s enable ingress
 
-# Note: NodePort services are used for external access (no additional add-ons needed)
+# Note: Host networking is used for direct access to standard ports (no additional add-ons needed)
 
 # Optional: Enable dashboard for monitoring
 microk8s enable dashboard
@@ -229,17 +229,40 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 
 ### 5. Deploy Everything
 
-#### Option 1: Default Deployment (NodePort Services - Recommended)
+#### Option 1: Host Networking (Recommended for Demos)
+```bash
+./scripts/deploy-hostnetwork.sh
+```
+**Benefits**: Direct access to standard ports (3306, 8080) with no port forwarding needed.
+
+#### Option 2: Standard Kubernetes Networking
 ```bash
 ./scripts/deploy.sh
 ```
+**Benefits**: Better isolation, supports multiple replicas, uses NodePort services.
 
-#### Option 2: Port Forwarding Only
+#### Option 3: Port Forwarding Only
 ```bash
 ./scripts/deploy.sh --port-forward
 ```
+**Benefits**: Works with any Kubernetes setup, uses standard ports via port forwarding.
 
 **Note**: The deployment script automatically handles Kafka Connect connector deployment after Kafka Connect is ready. You don't need to manually deploy the connectors.
+
+### Choosing the Right Deployment Option
+
+| Feature | Host Networking | NodePort Services | Port Forwarding |
+|---------|----------------|-------------------|-----------------|
+| **Standard Ports** | ✅ Yes (3306, 8080) | ❌ No (30306, 30080) | ✅ Yes (3306, 8080) |
+| **External Access** | ✅ Direct | ✅ Direct | ❌ Localhost only |
+| **Setup Complexity** | ✅ Simple | ⚠️ Medium | ⚠️ Medium |
+| **Performance** | ✅ Best | ⚠️ Good | ⚠️ Good |
+| **Security** | ⚠️ Lower isolation | ✅ Better isolation | ✅ Best isolation |
+| **Multiple Replicas** | ❌ No | ✅ Yes | ✅ Yes |
+| **Demo Friendly** | ✅ Perfect | ⚠️ Good | ⚠️ Good |
+| **Production Ready** | ⚠️ Limited | ✅ Yes | ❌ No |
+
+**Recommendation**: Use **Host Networking** for demos, **NodePort Services** for production.
 
 ### 6. Verify Deployment
 ```bash
@@ -249,22 +272,35 @@ kubectl get services -n odl-demo
 
 ### 7. Access Services
 
-#### Option 1: NodePort Services (Default - Recommended)
+#### Option 1: Host Networking (Recommended for Demos)
 ```bash
-# Deploy with NodePort services (default behavior)
-./scripts/deploy.sh
+# Deploy with host networking
+./scripts/deploy-hostnetwork.sh
 
-# After deployment, access services directly via VM IP:
+# After deployment, access services directly on standard ports:
 # MySQL: mysql://odl_user:odl_password@YOUR_VM_IP:3306/banking
 # Kafka UI: http://YOUR_VM_IP:8080
+# Kafka: YOUR_VM_IP:9092
 
-# Check NodePort services status
-kubectl get services -n odl-demo | grep nodeport
+# No additional configuration needed - services are immediately accessible!
 ```
 
-#### Option 2: Port Forwarding Only
+#### Option 2: Standard Kubernetes Networking
 ```bash
-# Deploy without NodePort services
+# Deploy with NodePort services
+./scripts/deploy.sh
+
+# After deployment, access services via NodePort:
+# MySQL: mysql://odl_user:odl_password@YOUR_VM_IP:30306/banking
+# Kafka UI: http://YOUR_VM_IP:30080
+
+# Or use port forwarding for standard ports:
+./scripts/port-forward.sh
+```
+
+#### Option 3: Port Forwarding Only
+```bash
+# Deploy without external services
 ./scripts/deploy.sh --port-forward
 
 # Then use port forwarding:
@@ -280,10 +316,16 @@ Kafka UI provides a web-based interface for monitoring and managing your Kafka c
 
 ### Accessing Kafka UI
 
-#### NodePort Access (Recommended)
+#### Host Networking Access (Recommended for Demos)
 ```bash
-# Access via VM IP
+# Access directly via VM IP on standard port
 http://YOUR_VM_IP:8080
+```
+
+#### NodePort Access
+```bash
+# Access via VM IP on NodePort
+http://YOUR_VM_IP:30080
 ```
 
 #### Port Forwarding Access
@@ -523,20 +565,55 @@ kubectl exec -it deployment/kafka -n odl-demo -- kafka-console-consumer \
   --topic mysql.inventory.customers
 ```
 
-## NodePort Service Configuration
+## Host Networking Configuration (Recommended for Demos)
 
-The demo uses NodePort services for external access with the following port allocation:
+The demo uses host networking for direct access to standard ports with the following configuration:
 
-- **MySQL NodePort**: `VM_IP:3306`
-- **Kafka UI NodePort**: `VM_IP:8080`
+- **MySQL**: `VM_IP:3306` (standard MySQL port)
+- **Kafka UI**: `VM_IP:8080` (standard web port)
+- **Kafka**: `VM_IP:9092` (standard Kafka port)
+
+### Benefits of Host Networking
+
+- **Standard Ports**: Uses native application ports (3306, 8080, 9092)
+- **No Port Mapping**: Direct access without port translation
+- **Better Performance**: No network overhead from port forwarding
+- **Simpler Configuration**: No complex Kubernetes networking setup
+- **Firewall Friendly**: Easy to configure firewall rules for standard ports
+- **Demo Perfect**: Ideal for demonstrations and development
+
+### Host Networking Management
+
+```bash
+# Check pod status (host networking pods)
+kubectl get pods -n odl-demo
+
+# View pod details
+kubectl describe pod -l app=mysql -n odl-demo
+kubectl describe pod -l app=kafka-ui -n odl-demo
+
+# Get VM IP address
+kubectl get nodes -o wide
+
+# Test service connectivity
+telnet YOUR_VM_IP 3306  # MySQL
+curl http://YOUR_VM_IP:8080  # Kafka UI
+telnet YOUR_VM_IP 9092  # Kafka
+```
+
+## NodePort Service Configuration (Alternative)
+
+The demo also supports NodePort services for external access with the following port allocation:
+
+- **MySQL NodePort**: `VM_IP:30306`
+- **Kafka UI NodePort**: `VM_IP:30080`
 
 ### Benefits of NodePort Services
 
-- **No Additional Add-ons**: Works out of the box with any Kubernetes cluster
-- **Direct Access**: Services accessible directly on VM's external IP
-- **Standard Ports**: Uses standard application ports (3306 for MySQL, 8080 for Kafka UI)
-- **Simple Setup**: No complex load balancer configuration required
-- **Firewall Friendly**: Easy to configure firewall rules for specific ports
+- **Better Isolation**: Pods have their own network namespace
+- **Multiple Replicas**: Can run multiple instances of the same service
+- **Service Discovery**: Can use Kubernetes DNS names
+- **Production Ready**: More suitable for production environments
 
 ### NodePort Service Management
 
@@ -548,12 +625,9 @@ kubectl get services -n odl-demo | grep nodeport
 kubectl describe service mysql-nodeport -n odl-demo
 kubectl describe service kafka-ui-nodeport -n odl-demo
 
-# Get VM IP address
-kubectl get nodes -o wide
-
 # Test service connectivity
-telnet YOUR_VM_IP 3306  # MySQL
-curl http://YOUR_VM_IP:8080  # Kafka UI
+telnet YOUR_VM_IP 30306  # MySQL
+curl http://YOUR_VM_IP:30080  # Kafka UI
 ```
 
 ## Demo Script
@@ -798,9 +872,11 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 ├── k8s/
 │   ├── mysql/
 │   │   ├── mysql-deployment.yaml
+│   │   ├── mysql-hostnetwork.yaml
 │   │   └── mysql-init-scripts.yaml
 │   ├── kafka/
 │   │   ├── kafka-all-in-one.yaml
+│   │   ├── kafka-hostnetwork.yaml
 │   │   └── kafka-connect.yaml
 │   ├── connectors/
 │   │   ├── debezium-mysql-connector.json
@@ -818,6 +894,9 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 │       └── index.js
 ├── scripts/
 │   ├── deploy.sh
+│   ├── deploy-hostnetwork.sh
+│   ├── port-forward.sh
+│   ├── stop-port-forward.sh
 │   ├── cleanup.sh
 │   └── generate-sample-data.py
 ├── requirements.txt
