@@ -187,6 +187,11 @@ echo "[$(get_timestamp)] Kafka Connect: kubectl port-forward service/kafka-conne
 echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
 
 echo ""
+print_status "Load Balancer Setup (Optional):"
+echo "[$(get_timestamp)] To expose MySQL and Kafka UI via load balancer:"
+echo "[$(get_timestamp)] ./scripts/setup-loadbalancer.sh"
+
+echo ""
 print_status "To check the status of all pods:"
 echo "[$(get_timestamp)] kubectl get pods -n odl-demo"
 

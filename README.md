@@ -66,6 +66,9 @@ microk8s enable ingress
 # Optional: Enable dashboard for monitoring
 microk8s enable dashboard
 
+# Optional: Enable load balancer for easier access to services
+microk8s enable metallb
+
 # Check status
 microk8s status
 ```
@@ -227,6 +230,8 @@ kubectl get services -n odl-demo
 ```
 
 ### 6. Access Services
+
+#### Option 1: Port Forwarding (Default)
 ```bash
 # MySQL
 kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
@@ -239,6 +244,16 @@ kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo
 
 # Aggregation Service
 kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo
+```
+
+#### Option 2: Load Balancer (Easier Access)
+```bash
+# Setup load balancer for MySQL and Kafka UI
+./scripts/setup-loadbalancer.sh
+
+# After setup, access services directly via external IPs:
+# MySQL: mysql://odl_user:odl_password@<EXTERNAL_IP>:3306/banking
+# Kafka UI: http://<EXTERNAL_IP>:8080
 ```
 
 ## Demo Script
@@ -388,6 +403,25 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
      http://localhost:8083/connectors
    ```
 
+6. **Load Balancer Issues**
+   ```bash
+   # Check if MetalLB is running
+   kubectl get pods -n metallb-system
+   
+   # Check load balancer services
+   kubectl get services -n odl-demo | grep loadbalancer
+   
+   # Check MetalLB logs
+   kubectl logs -n metallb-system -l app=metallb
+   
+   # If services don't get external IPs, check IP pool configuration
+   kubectl get configmap -n metallb-system config -o yaml
+   
+   # Restart MetalLB if needed
+   microk8s disable metallb
+   microk8s enable metallb
+   ```
+
 ### Reset Everything
 ```bash
 ./scripts/cleanup.sh
@@ -410,8 +444,12 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 │   │   └── mongodb-atlas-connector.json
 │   ├── microservices/
 │   │   └── aggregation-service-deployment.yaml
-│   └── monitoring/
-│       └── health-checks.yaml
+│   ├── monitoring/
+│   │   └── health-checks.yaml
+│   └── loadbalancer/
+│       ├── metallb-config.yaml
+│       ├── mysql-loadbalancer.yaml
+│       └── kafka-ui-loadbalancer.yaml
 ├── microservices/
 │   └── aggregation-service/
 │       ├── package.json
@@ -419,6 +457,7 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 ├── scripts/
 │   ├── deploy.sh
 │   ├── cleanup.sh
+│   ├── setup-loadbalancer.sh
 │   └── generate-sample-data.py
 ├── requirements.txt
 └── README.md
