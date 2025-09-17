@@ -126,11 +126,12 @@ if ! kubectl run mysql-client --image=mysql:8.0 --rm -i --restart=Never -n odl-d
     print_warning "Failed to generate sample data (this may be expected if data already exists)"
 fi
 
-# Build and deploy aggregation service
-print_status "Building aggregation service Docker image..."
-cd microservices/aggregation-service
-docker build -t aggregation-service:latest .
-cd ../..
+# Create configmap with source code
+print_status "Creating source code configmap..."
+kubectl create configmap aggregation-source -n odl-demo \
+  --from-file=package.json=microservices/aggregation-service/package.json \
+  --from-file=index.js=microservices/aggregation-service/index.js \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 print_status "Deploying aggregation service..."
 kubectl apply -f k8s/microservices/aggregation-service-deployment.yaml -n odl-demo

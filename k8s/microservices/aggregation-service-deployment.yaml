@@ -16,8 +16,7 @@ spec:
     spec:
       containers:
       - name: aggregation-service
-        image: aggregation-service:latest
-        imagePullPolicy: Never
+        image: node:18-alpine
         ports:
         - containerPort: 3000
         env:
@@ -33,6 +32,17 @@ spec:
               key: cluster2-uri
         - name: PORT
           value: "3000"
+        workingDir: /app
+        command: ["sh", "-c"]
+        args:
+        - |
+          cp /workspace/package.json /app/
+          cp /workspace/index.js /app/
+          npm install
+          npm start
+        volumeMounts:
+        - name: source-code
+          mountPath: /workspace
         resources:
           requests:
             memory: "512Mi"
@@ -52,6 +62,10 @@ spec:
             port: 3000
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: source-code
+        configMap:
+          name: aggregation-source
 ---
 apiVersion: v1
 kind: Service
