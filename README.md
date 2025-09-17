@@ -17,6 +17,7 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - **Analytics Layer**: MongoDB Atlas Cluster 2 (transformed subset)
 - **Orchestration**: MicroK8s for container orchestration
 - **Transformation Layer**: Node.js microservices for data processing
+- **Data Generation**: Python scripts for sample data creation
 
 ## Prerequisites
 
@@ -24,7 +25,8 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - MicroK8s (or any Kubernetes cluster)
 - kubectl
 - curl
-- Node.js 18+ (for local development)
+- Node.js 18+ (for microservices)
+- Python 3.8+ (for data generation scripts)
 
 ### MicroK8s Setup on Ubuntu 24.04
 
@@ -160,6 +162,9 @@ microk8s enable dns
 ```bash
 git clone <your-repo-url>
 cd 2025_ODL_Demo
+
+# Install Python dependencies
+pip install -r requirements.txt
 ```
 
 ### 2. Configure MongoDB Atlas Secrets
@@ -257,8 +262,8 @@ kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_passwor
 INSERT INTO customers (first_name, last_name, email, customer_status) 
 VALUES ('Demo', 'User', 'demo@example.com', 'ACTIVE');
 
-# Or use the sample data script
-node scripts/generate-sample-data.js
+# Or use the Python sample data script
+python3 scripts/generate-sample-data.py
 ```
 
 ### 3. Verify Data Flow
@@ -397,7 +402,8 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 ├── scripts/
 │   ├── deploy.sh
 │   ├── cleanup.sh
-│   └── generate-sample-data.js
+│   └── generate-sample-data.py
+├── requirements.txt
 └── README.md
 ```
 

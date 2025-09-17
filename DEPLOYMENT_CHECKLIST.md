@@ -21,6 +21,7 @@
 
 ### 3. Code Preparation
 - [ ] Clone repository to VM
+- [ ] Install Python dependencies: `pip install -r requirements.txt`
 - [ ] Update MongoDB connection strings in `k8s/microservices/aggregation-service-deployment.yaml`
 - [ ] Update MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`
 - [ ] Replace `YOUR_PASSWORD` with actual `odl-writer` password in connector config
@@ -44,7 +45,7 @@
 
 ### 3. Generate Sample Data
 - [ ] Connect to MySQL: `kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_password banking`
-- [ ] Run sample data generation script
+- [ ] Run Python sample data generation script: `python3 scripts/generate-sample-data.py`
 - [ ] Verify data in MySQL
 
 ### 4. Verify Data Flow
