@@ -45,32 +45,133 @@ async function initializeConnections() {
   }
 }
 
+// Helper function to decode base64 encoded fields
+function decodeBase64Field(value) {
+  if (typeof value === 'string' && value.length > 0) {
+    try {
+      // Try to decode as base64
+      const decoded = Buffer.from(value, 'base64').toString('utf-8');
+      // Check if it's a valid number
+      const num = parseFloat(decoded);
+      if (!isNaN(num)) {
+        return num;
+      }
+      return decoded;
+    } catch (error) {
+      // If decoding fails, return original value
+      return value;
+    }
+  }
+  return value;
+}
+
+// Helper function to safely get numeric values from CDC data
+function safeNumber(value, defaultValue = 0) {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Handle NumberLong objects
+  if (typeof value === 'object' && value.$numberLong) {
+    return parseInt(value.$numberLong);
+  }
+  
+  // Handle base64 encoded values
+  if (typeof value === 'string') {
+    const decoded = decodeBase64Field(value);
+    const num = parseFloat(decoded);
+    return isNaN(num) ? defaultValue : num;
+  }
+  
+  const num = parseFloat(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
+// Helper function to safely get string values from CDC data
+function safeString(value, defaultValue = '') {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Handle base64 encoded values
+  if (typeof value === 'string') {
+    const decoded = decodeBase64Field(value);
+    return decoded;
+  }
+  
+  return String(value);
+}
+
+// Helper function to safely get date values from CDC data
+function safeDate(value) {
+  if (value === null || value === undefined) return null;
+  
+  // Handle NumberLong timestamps
+  if (typeof value === 'object' && value.$numberLong) {
+    return new Date(parseInt(value.$numberLong));
+  }
+  
+  // Handle string dates
+  if (typeof value === 'string') {
+    return new Date(value);
+  }
+  
+  return new Date(value);
+}
+
+// Extract actual data from CDC event
+function extractDataFromCDC(cdcEvent) {
+  if (!cdcEvent || !cdcEvent.after) return null;
+  return cdcEvent.after;
+}
+
 // Aggregate customer data from Cluster 1 to Cluster 2
 async function aggregateCustomerData(customerId) {
   try {
     const db1 = cluster1Client.db('banking');
     const db2 = cluster2Client.db('analytics');
     
-    // Get customer data
-    const customer = await db1.collection('customers').findOne({ customer_id: customerId });
-    if (!customer) {
+    // Get customer data from CDC events
+    const customerCDC = await db1.collection('customers').findOne({ 
+      'after.customer_id': { $numberLong: customerId.toString() } 
+    });
+    
+    if (!customerCDC) {
       logger.warn(`Customer ${customerId} not found in Cluster 1`);
       return;
     }
     
-    logger.info(`Processing customer ${customerId}: ${customer.first_name} ${customer.last_name}`);
+    const customer = extractDataFromCDC(customerCDC);
+    if (!customer) {
+      logger.warn(`Customer ${customerId} data is invalid`);
+      return;
+    }
     
-    // Get customer accounts
-    const accounts = await db1.collection('accounts').find({ customer_id: customerId }).toArray();
+    logger.info(`Processing customer ${customerId}: ${safeString(customer.first_name)} ${safeString(customer.last_name)}`);
     
-    // Get recent transactions (last 30 days)
+    // Get customer accounts from CDC events
+    const accountsCDC = await db1.collection('accounts').find({ 
+      'after.customer_id': { $numberLong: customerId.toString() } 
+    }).toArray();
+    
+    const accounts = accountsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
+    
+    // Get customer agreements from CDC events
+    const agreementsCDC = await db1.collection('agreements').find({ 
+      'after.customer_id': { $numberLong: customerId.toString() } 
+    }).toArray();
+    
+    const agreements = agreementsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
+    
+    // Get recent transactions (last 30 days) from CDC events
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const transactions = await db1.collection('transactions').find({
-      account_id: { $in: accounts.map(acc => acc.account_id) },
-      transaction_date: { $gte: thirtyDaysAgo }
+    const accountIds = accounts.map(acc => ({ $numberLong: acc.account_id.toString() }));
+    const transactionsCDC = await db1.collection('transactions').find({
+      'after.account_id': { $in: accountIds },
+      'after.transaction_date': { 
+        $gte: { $numberLong: thirtyDaysAgo.getTime().toString() }
+      }
     }).toArray();
+    
+    const transactions = transactionsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
     
     // Calculate aggregated data
     const totalBalance = accounts.reduce((sum, acc) => sum + safeNumber(acc.balance), 0);
@@ -78,29 +179,45 @@ async function aggregateCustomerData(customerId) {
     const avgMonthlyTransactions = Math.round(transactions.length / 1); // Simplified for demo
     
     const lastTransactionDate = transactions.length > 0 
-      ? new Date(Math.max(...transactions.map(t => new Date(t.transaction_date))))
+      ? new Date(Math.max(...transactions.map(t => safeNumber(t.transaction_date))))
       : null;
+    
+    // Calculate agreement metrics
+    const totalAgreements = agreements.length;
+    const activeAgreements = agreements.filter(agr => agr.status === 'ACTIVE').length;
+    const totalPrincipalAmount = agreements.reduce((sum, agr) => sum + safeNumber(agr.principal_amount), 0);
+    const totalCurrentBalance = agreements.reduce((sum, agr) => sum + safeNumber(agr.current_balance), 0);
     
     // Create analytics document
     const analyticsDoc = {
       customer_id: customerId,
       profile: {
-        name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
-        email: customer.email || '',
-        location: `${customer.city || ''}, ${customer.state || ''}`.trim(),
-        status: customer.customer_status || 'UNKNOWN'
+        name: `${safeString(customer.first_name)} ${safeString(customer.last_name)}`.trim(),
+        email: safeString(customer.email),
+        location: `${safeString(customer.city)}, ${safeString(customer.state)}`.trim(),
+        status: safeString(customer.customer_status, 'UNKNOWN'),
+        phone: safeString(customer.phone),
+        address: `${safeString(customer.address_line1)} ${safeString(customer.address_line2 || '')}`.trim(),
+        postal_code: safeString(customer.postal_code),
+        country: safeString(customer.country),
+        date_of_birth: safeDate(customer.date_of_birth)
       },
       financial_summary: {
         total_accounts: accounts.length,
         total_balance: totalBalance,
         account_types: accountTypes,
         avg_monthly_transactions: avgMonthlyTransactions,
-        last_transaction_date: lastTransactionDate
+        last_transaction_date: lastTransactionDate,
+        total_agreements: totalAgreements,
+        active_agreements: activeAgreements,
+        total_principal_amount: totalPrincipalAmount,
+        total_current_balance: totalCurrentBalance
       },
       risk_profile: {
-        credit_score_band: calculateCreditScoreBand(totalBalance, accounts.length),
-        default_risk: calculateDefaultRisk(totalBalance, transactions.length),
-        transaction_pattern: calculateTransactionPattern(transactions.length)
+        credit_score_band: calculateCreditScoreBand(totalBalance, accounts.length, totalAgreements),
+        default_risk: calculateDefaultRisk(totalBalance, transactions.length, totalCurrentBalance),
+        transaction_pattern: calculateTransactionPattern(transactions.length),
+        agreement_risk: calculateAgreementRisk(agreements.length, totalCurrentBalance, totalPrincipalAmount)
       },
       computed_at: new Date()
     };
@@ -120,16 +237,16 @@ async function aggregateCustomerData(customerId) {
 }
 
 // Helper functions for risk calculation
-function calculateCreditScoreBand(balance, accountCount) {
-  if (balance > 50000 && accountCount > 2) return 'EXCELLENT';
+function calculateCreditScoreBand(balance, accountCount, agreementCount) {
+  if (balance > 50000 && accountCount > 2 && agreementCount > 0) return 'EXCELLENT';
   if (balance > 25000 && accountCount > 1) return 'GOOD';
   if (balance > 10000) return 'FAIR';
   return 'POOR';
 }
 
-function calculateDefaultRisk(balance, transactionCount) {
-  if (balance > 0 && transactionCount > 10) return 'LOW';
-  if (balance > 0) return 'MEDIUM';
+function calculateDefaultRisk(balance, transactionCount, currentBalance) {
+  if (balance > 0 && transactionCount > 10 && currentBalance < balance * 0.5) return 'LOW';
+  if (balance > 0 && currentBalance < balance) return 'MEDIUM';
   return 'HIGH';
 }
 
@@ -139,10 +256,11 @@ function calculateTransactionPattern(transactionCount) {
   return 'LOW';
 }
 
-// Helper function to safely get numeric values
-function safeNumber(value, defaultValue = 0) {
-  const num = parseFloat(value);
-  return isNaN(num) ? defaultValue : num;
+function calculateAgreementRisk(agreementCount, currentBalance, principalAmount) {
+  if (agreementCount === 0) return 'NONE';
+  if (currentBalance > principalAmount * 0.8) return 'HIGH';
+  if (currentBalance > principalAmount * 0.5) return 'MEDIUM';
+  return 'LOW';
 }
 
 // Process all customers
@@ -157,12 +275,18 @@ async function processAllCustomers() {
   
   try {
     const db1 = cluster1Client.db('banking');
-    const customers = await db1.collection('customers').find({}).toArray();
     
-    logger.info(`Processing ${customers.length} customers...`);
+    // Get all unique customer IDs from CDC events
+    const customersCDC = await db1.collection('customers').find({}).toArray();
+    const customerIds = [...new Set(customersCDC.map(cdc => {
+      const customer = extractDataFromCDC(cdc);
+      return customer ? safeNumber(customer.customer_id) : null;
+    }).filter(Boolean))];
     
-    for (const customer of customers) {
-      await aggregateCustomerData(customer.customer_id);
+    logger.info(`Processing ${customerIds.length} customers...`);
+    
+    for (const customerId of customerIds) {
+      await aggregateCustomerData(customerId);
       // Small delay to prevent overwhelming the system
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -175,7 +299,7 @@ async function processAllCustomers() {
   }
 }
 
-// Set up change streams for real-time processing
+// Set up change streams for real-time processing of CDC events
 async function setupChangeStreams() {
   try {
     const db1 = cluster1Client.db('banking');
@@ -185,8 +309,9 @@ async function setupChangeStreams() {
     customersStream.on('change', async (change) => {
       logger.info('Customer change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const customerId = change.fullDocument?.customer_id || change.documentKey?.customer_id;
-        if (customerId) {
+        const customer = extractDataFromCDC(change.fullDocument);
+        if (customer && customer.customer_id) {
+          const customerId = safeNumber(customer.customer_id);
           logger.info(`Triggering aggregation for customer ${customerId} due to customer change`);
           await aggregateCustomerData(customerId);
         }
@@ -198,9 +323,24 @@ async function setupChangeStreams() {
     accountsStream.on('change', async (change) => {
       logger.info('Account change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const customerId = change.fullDocument?.customer_id || change.documentKey?.customer_id;
-        if (customerId) {
+        const account = extractDataFromCDC(change.fullDocument);
+        if (account && account.customer_id) {
+          const customerId = safeNumber(account.customer_id);
           logger.info(`Triggering aggregation for customer ${customerId} due to account change`);
+          await aggregateCustomerData(customerId);
+        }
+      }
+    });
+    
+    // Watch for changes in agreements collection
+    const agreementsStream = db1.collection('agreements').watch();
+    agreementsStream.on('change', async (change) => {
+      logger.info('Agreement change detected:', change.operationType);
+      if (change.operationType === 'insert' || change.operationType === 'update') {
+        const agreement = extractDataFromCDC(change.fullDocument);
+        if (agreement && agreement.customer_id) {
+          const customerId = safeNumber(agreement.customer_id);
+          logger.info(`Triggering aggregation for customer ${customerId} due to agreement change`);
           await aggregateCustomerData(customerId);
         }
       }
@@ -211,13 +351,19 @@ async function setupChangeStreams() {
     transactionsStream.on('change', async (change) => {
       logger.info('Transaction change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const accountId = change.fullDocument?.account_id || change.documentKey?.account_id;
-        if (accountId) {
+        const transaction = extractDataFromCDC(change.fullDocument);
+        if (transaction && transaction.account_id) {
           // Find the customer for this account
-          const account = await db1.collection('accounts').findOne({ account_id: accountId });
-          if (account && account.customer_id) {
-            logger.info(`Triggering aggregation for customer ${account.customer_id} due to transaction change`);
-            await aggregateCustomerData(account.customer_id);
+          const accountCDC = await db1.collection('accounts').findOne({ 
+            'after.account_id': { $numberLong: transaction.account_id.toString() } 
+          });
+          if (accountCDC) {
+            const account = extractDataFromCDC(accountCDC);
+            if (account && account.customer_id) {
+              const customerId = safeNumber(account.customer_id);
+              logger.info(`Triggering aggregation for customer ${customerId} due to transaction change`);
+              await aggregateCustomerData(customerId);
+            }
           }
         }
       }
@@ -258,11 +404,17 @@ app.get('/stats', async (req, res) => {
     const db1 = cluster1Client.db('banking');
     const db2 = cluster2Client.db('analytics');
     
-    const customerCount = await db1.collection('customers').countDocuments();
+    // Count unique customers from CDC events
+    const customersCDC = await db1.collection('customers').find({}).toArray();
+    const uniqueCustomers = new Set(customersCDC.map(cdc => {
+      const customer = extractDataFromCDC(cdc);
+      return customer ? safeNumber(customer.customer_id) : null;
+    }).filter(Boolean));
+    
     const analyticsCount = await db2.collection('customer_analytics').countDocuments();
     
     res.json({
-      cluster1_customers: customerCount,
+      cluster1_customers: uniqueCustomers.size,
       cluster2_analytics: analyticsCount,
       processing: isProcessing
     });
