@@ -164,11 +164,12 @@ def random_date(days_ago: int) -> datetime:
     return now - timedelta(days=random_days)
 
 
-def generate_customer() -> Dict[str, Any]:
-    """Generate a random customer record."""
+def generate_customer(customer_id: int) -> Dict[str, Any]:
+    """Generate a random customer record with unique email."""
     first_name = random_choice(FIRST_NAMES)
     last_name = random_choice(LAST_NAMES)
-    email = f"{first_name.lower()}.{last_name.lower()}@email.com"
+    # Ensure unique email by including customer_id
+    email = f"{first_name.lower()}.{last_name.lower()}{customer_id}@email.com"
     
     return {
         'first_name': first_name,
@@ -188,14 +189,14 @@ def generate_customer() -> Dict[str, Any]:
     }
 
 
-def generate_account(customer_id: int) -> Dict[str, Any]:
+def generate_account(customer_id: int, account_counter: int) -> Dict[str, Any]:
     """Generate a random account record for the given customer."""
     account_types = ['CHECKING', 'SAVINGS', 'CREDIT', 'LOAN']
     account_type = random_choice(account_types)
     
     return {
         'customer_id': customer_id,
-        'account_number': f"ACC-2024-{customer_id:06d}",
+        'account_number': f"ACC-2024-{customer_id:06d}-{account_counter:02d}",
         'account_type': account_type,
         'balance': random_between(100, 50000),
         'currency': 'USD',
@@ -231,7 +232,7 @@ def generate_transaction(account_id: int) -> Dict[str, Any]:
     }
 
 
-def generate_agreement(customer_id: int, account_id: int) -> Dict[str, Any]:
+def generate_agreement(customer_id: int, account_id: int, agreement_counter: int) -> Dict[str, Any]:
     """Generate a random agreement record for the given customer and account."""
     agreement_types = ['LOAN', 'CREDIT_CARD', 'OVERDRAFT', 'INVESTMENT']
     agreement_type = random_choice(agreement_types)
@@ -241,7 +242,7 @@ def generate_agreement(customer_id: int, account_id: int) -> Dict[str, Any]:
         'customer_id': customer_id,
         'account_id': account_id,
         'agreement_type': agreement_type,
-        'agreement_number': f"AGR-{random_between(100000, 999999)}",
+        'agreement_number': f"AGR-{customer_id:06d}-{agreement_counter:03d}",
         'principal_amount': principal_amount,
         'current_balance': random_between(0, principal_amount),
         'interest_rate': random_between(3, 15) / 100,
@@ -359,7 +360,7 @@ def generate_and_insert_data() -> None:
         # Generate customers
         customers = []
         for i in range(1, CONFIG['customers'] + 1):
-            customers.append(generate_customer())
+            customers.append(generate_customer(i))
         
         # Insert customers
         print(f"Inserting {len(customers)} customers...")
@@ -374,15 +375,22 @@ def generate_and_insert_data() -> None:
         """
         
         for customer in customers:
-            cursor.execute(customer_insert_query, customer)
+            try:
+                cursor.execute(customer_insert_query, customer)
+            except Error as e:
+                if "Duplicate entry" in str(e):
+                    print(f"Skipping duplicate customer: {customer['email']}")
+                    continue
+                else:
+                    raise
         
         # Generate accounts
         accounts = []
         for customer_id in range(1, CONFIG['customers'] + 1):
             num_accounts = random_between(CONFIG['accounts_per_customer']['min'], 
                                         CONFIG['accounts_per_customer']['max'])
-            for _ in range(num_accounts):
-                accounts.append(generate_account(customer_id))
+            for account_counter in range(1, num_accounts + 1):
+                accounts.append(generate_account(customer_id, account_counter))
         
         # Insert accounts
         print(f"Inserting {len(accounts)} accounts...")
@@ -396,7 +404,14 @@ def generate_and_insert_data() -> None:
         """
         
         for account in accounts:
-            cursor.execute(account_insert_query, account)
+            try:
+                cursor.execute(account_insert_query, account)
+            except Error as e:
+                if "Duplicate entry" in str(e):
+                    print(f"Skipping duplicate account: {account['account_number']}")
+                    continue
+                else:
+                    raise
         
         # Generate transactions
         transactions = []
@@ -422,11 +437,13 @@ def generate_and_insert_data() -> None:
         # Generate agreements
         agreements = []
         customers_with_agreements = int(CONFIG['customers'] * CONFIG['agreements_percentage'] / 100)
+        agreement_counter = 1
         for i in range(1, customers_with_agreements + 1):
             customer_accounts = [acc for acc in accounts if acc['customer_id'] == i]
             if customer_accounts:
                 account = random_choice(customer_accounts)
-                agreements.append(generate_agreement(i, account['account_id']))
+                agreements.append(generate_agreement(i, account['account_id'], agreement_counter))
+                agreement_counter += 1
         
         # Insert agreements
         print(f"Inserting {len(agreements)} agreements...")
@@ -442,7 +459,14 @@ def generate_and_insert_data() -> None:
         """
         
         for agreement in agreements:
-            cursor.execute(agreement_insert_query, agreement)
+            try:
+                cursor.execute(agreement_insert_query, agreement)
+            except Error as e:
+                if "Duplicate entry" in str(e):
+                    print(f"Skipping duplicate agreement: {agreement['agreement_number']}")
+                    continue
+                else:
+                    raise
         
         # Commit all changes
         connection.commit()
