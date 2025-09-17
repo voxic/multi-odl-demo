@@ -6,6 +6,8 @@ This repository contains a complete demo of an Operational Data Layer using Mong
 
 ```
 MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary ODL) → MongoDB Atlas Cluster 2 (Analytics/Subset)
+                    ↓
+            Load Balancer (MetalLB) → External Access (MySQL: 10.64.140.43, Kafka UI: 10.64.140.44)
 ```
 
 ### Key Components
@@ -16,6 +18,7 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - **Primary ODL**: MongoDB Atlas Cluster 1 (full dataset)
 - **Analytics Layer**: MongoDB Atlas Cluster 2 (transformed subset)
 - **Orchestration**: MicroK8s for container orchestration
+- **Load Balancer**: MetalLB for external service access
 - **Transformation Layer**: Node.js microservices for data processing
 - **Data Generation**: Python scripts for sample data creation
 
@@ -170,7 +173,16 @@ cd 2025_ODL_Demo
 pip install -r requirements.txt
 ```
 
-### 2. Configure MongoDB Atlas Secrets
+### 2. Enable MicroK8s Add-ons
+```bash
+# Enable required add-ons
+microk8s enable dns storage ingress metallb
+
+# Optional: Enable dashboard for monitoring
+microk8s enable dashboard
+```
+
+### 3. Configure MongoDB Atlas Secrets
 Update the connection strings in `k8s/microservices/aggregation-service-deployment.yaml`:
 
 ```yaml
@@ -179,12 +191,12 @@ stringData:
   cluster2-uri: "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster2.mongodb.net/analytics?retryWrites=true&w=majority"
 ```
 
-### 3. Configure Kafka Connect Connectors
+### 4. Configure Kafka Connect Connectors
 
-#### 3.1 Update Debezium MySQL Connector
+#### 4.1 Update Debezium MySQL Connector
 The MySQL connector is pre-configured in `k8s/connectors/debezium-mysql-connector.json` and should work with the default MySQL deployment. No changes needed unless you're using custom MySQL credentials.
 
-#### 3.2 Update MongoDB Atlas Connector
+#### 4.2 Update MongoDB Atlas Connector
 Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`:
 
 ```json
@@ -216,7 +228,7 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 
 **Important**: Replace `YOUR_PASSWORD` with your actual MongoDB Atlas password for the `odl-writer` user.
 
-### 4. Deploy Everything
+### 5. Deploy Everything
 
 #### Option 1: Default Deployment (Load Balancer - Recommended)
 ```bash
@@ -230,13 +242,13 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 
 **Note**: The deployment script automatically handles Kafka Connect connector deployment after Kafka Connect is ready. You don't need to manually deploy the connectors.
 
-### 5. Verify Deployment
+### 6. Verify Deployment
 ```bash
 kubectl get pods -n odl-demo
 kubectl get services -n odl-demo
 ```
 
-### 6. Access Services
+### 7. Access Services
 
 #### Option 1: Load Balancer (Default - Recommended)
 ```bash
@@ -246,6 +258,9 @@ kubectl get services -n odl-demo
 # After deployment, access services directly via external IPs:
 # MySQL: mysql://odl_user:odl_password@10.64.140.43:3306/banking
 # Kafka UI: http://10.64.140.44:8080
+
+# Check load balancer status
+kubectl get services -n odl-demo | grep loadbalancer
 ```
 
 #### Option 2: Port Forwarding Only
@@ -258,6 +273,285 @@ kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
 kubectl port-forward service/kafka-service 9092:9092 -n odl-demo
 kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo
 kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo
+```
+
+## Kafka UI - Monitoring and Management
+
+Kafka UI provides a web-based interface for monitoring and managing your Kafka cluster and connectors. It's essential for debugging data flow issues and monitoring system health.
+
+### Accessing Kafka UI
+
+#### Load Balancer Access (Recommended)
+```bash
+# Access via external IP
+http://10.64.140.44:8080
+```
+
+#### Port Forwarding Access
+```bash
+# Set up port forwarding
+kubectl port-forward service/kafka-ui-loadbalancer 8080:8080 -n odl-demo
+
+# Access via localhost
+http://localhost:8080
+```
+
+### Kafka UI Features
+
+#### 1. Cluster Overview
+- **Brokers**: View broker status, configuration, and metrics
+- **Topics**: Browse all Kafka topics and their configurations
+- **Messages**: View real-time message flow through topics
+- **Consumers**: Monitor consumer groups and their lag
+
+#### 2. Topic Management
+- **Topic List**: See all topics including system topics
+- **Topic Details**: View partitions, replication factor, and configuration
+- **Message Browser**: Browse messages by partition and offset
+- **Topic Creation**: Create new topics with custom configurations
+
+#### 3. Connector Management
+- **Connector Status**: View all deployed connectors and their status
+- **Connector Configuration**: Inspect connector configurations
+- **Connector Logs**: View connector-specific logs and errors
+- **Connector Control**: Start, stop, restart, and delete connectors
+
+### Key Topics to Monitor
+
+The ODL demo uses these critical topics:
+- `mysql.inventory.customers` - Customer data changes
+- `mysql.inventory.accounts` - Account data changes  
+- `mysql.inventory.transactions` - Transaction data changes
+- `mysql.inventory.agreements` - Agreement data changes
+
+## Connector Status Monitoring
+
+### Checking Connector Status
+
+#### 1. Via Kafka UI (Recommended)
+1. Open Kafka UI in your browser
+2. Navigate to **Connectors** section
+3. View connector list with status indicators:
+   - **RUNNING** (Green) - Connector is healthy and processing data
+   - **FAILED** (Red) - Connector has errors and needs attention
+   - **PAUSED** (Yellow) - Connector is temporarily stopped
+   - **UNASSIGNED** (Gray) - Connector is not assigned to any worker
+
+#### 2. Via REST API
+```bash
+# List all connectors
+curl http://localhost:8083/connectors
+
+# Check specific connector status
+curl http://localhost:8083/connectors/debezium-mysql-connector/status
+curl http://localhost:8083/connectors/mongodb-atlas-connector/status
+
+# Get connector configuration
+curl http://localhost:8083/connectors/debezium-mysql-connector/config
+
+# Get connector tasks
+curl http://localhost:8083/connectors/debezium-mysql-connector/tasks
+```
+
+#### 3. Via kubectl
+```bash
+# Check Kafka Connect logs
+kubectl logs deployment/kafka-connect -n odl-demo
+
+# Check specific connector logs
+kubectl logs deployment/kafka-connect -n odl-demo | grep "debezium-mysql-connector"
+kubectl logs deployment/kafka-connect -n odl-demo | grep "mongodb-atlas-connector"
+```
+
+### Connector Health Indicators
+
+#### Healthy Connector Status
+```json
+{
+  "name": "debezium-mysql-connector",
+  "connector": {
+    "state": "RUNNING",
+    "worker_id": "kafka-connect-0:8083"
+  },
+  "tasks": [
+    {
+      "id": 0,
+      "state": "RUNNING",
+      "worker_id": "kafka-connect-0:8083"
+    }
+  ]
+}
+```
+
+#### Failed Connector Status
+```json
+{
+  "name": "mongodb-atlas-connector",
+  "connector": {
+    "state": "FAILED",
+    "worker_id": "kafka-connect-0:8083",
+    "trace": "Connection refused to MongoDB Atlas cluster"
+  },
+  "tasks": [
+    {
+      "id": 0,
+      "state": "FAILED",
+      "worker_id": "kafka-connect-0:8083",
+      "trace": "Connection refused to MongoDB Atlas cluster"
+    }
+  ]
+}
+```
+
+### Troubleshooting Connector Issues
+
+#### 1. MySQL Connector (Debezium) Issues
+
+**Common Problems:**
+- MySQL connection failures
+- Binlog not enabled
+- User permissions issues
+- Network connectivity problems
+
+**Debugging Steps:**
+```bash
+# Check connector status
+curl http://localhost:8083/connectors/debezium-mysql-connector/status
+
+# Check connector logs
+kubectl logs deployment/kafka-connect -n odl-demo | grep -i "debezium"
+
+# Test MySQL connection
+kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_password -e "SHOW MASTER STATUS;"
+
+# Check if binlog is enabled
+kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_password -e "SHOW VARIABLES LIKE 'log_bin';"
+```
+
+**Common Fixes:**
+```bash
+# Restart connector
+curl -X POST http://localhost:8083/connectors/debezium-mysql-connector/restart
+
+# Delete and recreate connector
+curl -X DELETE http://localhost:8083/connectors/debezium-mysql-connector
+curl -X POST -H "Content-Type: application/json" \
+  --data @k8s/connectors/debezium-mysql-connector.json \
+  http://localhost:8083/connectors
+```
+
+#### 2. MongoDB Atlas Connector Issues
+
+**Common Problems:**
+- Authentication failures
+- Network connectivity issues
+- IP whitelist problems
+- Database/collection access issues
+
+**Debugging Steps:**
+```bash
+# Check connector status
+curl http://localhost:8083/connectors/mongodb-atlas-connector/status
+
+# Check connector logs
+kubectl logs deployment/kafka-connect -n odl-demo | grep -i "mongodb"
+
+# Test MongoDB connection (if you have mongosh installed)
+mongosh "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster1.mongodb.net/banking"
+```
+
+**Common Fixes:**
+```bash
+# Verify connection string format
+# Should be: mongodb+srv://odl-writer:PASSWORD@cluster1.mongodb.net/banking?retryWrites=true&w=majority
+
+# Check IP whitelist in MongoDB Atlas
+# Ensure your VM's public IP is whitelisted
+
+# Restart connector
+curl -X POST http://localhost:8083/connectors/mongodb-atlas-connector/restart
+
+# Delete and recreate connector
+curl -X DELETE http://localhost:8083/connectors/mongodb-atlas-connector
+curl -X POST -H "Content-Type: application/json" \
+  --data @k8s/connectors/mongodb-atlas-connector.json \
+  http://localhost:8083/connectors
+```
+
+### Data Flow Verification
+
+#### 1. Check Topic Messages
+```bash
+# View messages in customer topic
+kubectl exec -it deployment/kafka -n odl-demo -- kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic mysql.inventory.customers \
+  --from-beginning
+
+# View messages in account topic
+kubectl exec -it deployment/kafka -n odl-demo -- kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic mysql.inventory.accounts \
+  --from-beginning
+```
+
+#### 2. Check MongoDB Collections
+```bash
+# Connect to MongoDB Atlas (if mongosh is available)
+mongosh "mongodb+srv://odl-reader:YOUR_PASSWORD@cluster1.mongodb.net/banking"
+
+# Check collections
+show collections
+
+# Check customer data
+db.customers.find().limit(5)
+
+# Check account data
+db.accounts.find().limit(5)
+```
+
+#### 3. Real-time Monitoring
+```bash
+# Watch connector logs in real-time
+kubectl logs -f deployment/kafka-connect -n odl-demo
+
+# Watch aggregation service logs
+kubectl logs -f deployment/aggregation-service -n odl-demo
+
+# Monitor topic message flow
+kubectl exec -it deployment/kafka -n odl-demo -- kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic mysql.inventory.customers
+```
+
+## Load Balancer Configuration
+
+The demo uses MetalLB for load balancing with the following IP allocation:
+
+- **IP Range**: `10.64.140.43-10.64.140.49`
+- **MySQL Load Balancer**: `10.64.140.43:3306`
+- **Kafka UI Load Balancer**: `10.64.140.44:8080`
+
+### Benefits of Load Balancer
+
+- **No Port Forwarding**: Direct external access to services
+- **Predictable IPs**: Fixed IP addresses for easy connection
+- **Better for Demos**: Share IPs directly with others
+- **Production-like**: More realistic than port forwarding
+- **Persistent Access**: Services remain accessible across sessions
+
+### Load Balancer Management
+
+```bash
+# Check load balancer status
+kubectl get services -n odl-demo | grep loadbalancer
+
+# Check MetalLB status
+kubectl get pods -n metallb-system
+
+# View load balancer details
+kubectl describe service mysql-loadbalancer -n odl-demo
+kubectl describe service kafka-ui-loadbalancer -n odl-demo
 ```
 
 ## Demo Script
@@ -421,9 +715,72 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
    # If services don't get external IPs, check IP pool configuration
    kubectl get configmap -n metallb-system config -o yaml
    
+   # Verify IP range is available on your network
+   ping 10.64.140.43
+   ping 10.64.140.44
+   
    # Restart MetalLB if needed
    microk8s disable metallb
    microk8s enable metallb
+   
+   # Recreate load balancer services
+   kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer -n odl-demo
+   kubectl apply -f k8s/loadbalancer/
+   ```
+
+7. **Kafka UI Issues**
+   ```bash
+   # Check if Kafka UI pod is running
+   kubectl get pods -n odl-demo | grep kafka-ui
+   
+   # Check Kafka UI logs
+   kubectl logs deployment/kafka-ui -n odl-demo
+   
+   # Check Kafka UI service
+   kubectl get service kafka-ui-loadbalancer -n odl-demo
+   
+   # Verify Kafka UI can connect to Kafka
+   kubectl exec -it deployment/kafka-ui -n odl-demo -- curl http://localhost:8080/actuator/health
+   
+   # Check if Kafka UI is accessible via port forwarding
+   kubectl port-forward service/kafka-ui-loadbalancer 8080:8080 -n odl-demo
+   # Then test: curl http://localhost:8080
+   
+   # Restart Kafka UI if needed
+   kubectl rollout restart deployment/kafka-ui -n odl-demo
+   
+   # Check Kafka UI configuration
+   kubectl describe deployment kafka-ui -n odl-demo
+   ```
+
+8. **Kafka UI Connection Issues**
+   ```bash
+   # Verify Kafka UI can reach Kafka brokers
+   kubectl exec -it deployment/kafka-ui -n odl-demo -- nslookup kafka-service
+   
+   # Check network connectivity
+   kubectl exec -it deployment/kafka-ui -n odl-demo -- telnet kafka-service 9092
+   
+   # Verify Kafka UI environment variables
+   kubectl exec -it deployment/kafka-ui -n odl-demo -- env | grep KAFKA
+   
+   # Check if Kafka UI is using correct bootstrap servers
+   kubectl get configmap kafka-ui-config -n odl-demo -o yaml
+   ```
+
+9. **Kafka UI Performance Issues**
+   ```bash
+   # Check Kafka UI resource usage
+   kubectl top pod -l app=kafka-ui -n odl-demo
+   
+   # Check if Kafka UI has enough memory
+   kubectl describe pod -l app=kafka-ui -n odl-demo
+   
+   # Monitor Kafka UI logs for memory issues
+   kubectl logs deployment/kafka-ui -n odl-demo | grep -i "out of memory"
+   
+   # Check Kafka UI metrics endpoint
+   kubectl exec -it deployment/kafka-ui -n odl-demo -- curl http://localhost:8080/actuator/metrics
    ```
 
 ### Reset Everything
