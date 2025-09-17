@@ -7,8 +7,16 @@ This repository contains a complete demo of an Operational Data Layer using Mong
 ```
 MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary ODL) → MongoDB Atlas Cluster 2 (Analytics/Subset)
                     ↓
-            Host Networking → Direct Access (MySQL: VM_IP:3306, Kafka UI: VM_IP:8080)
+            Host Networking → Direct Access (MySQL: VM_IP:3306, Kafka UI: VM_IP:8080, Kafka Connect: VM_IP:8083)
 ```
+
+### Data Flow
+1. **MySQL** stores operational banking data (customers, accounts, transactions, agreements)
+2. **Debezium** captures changes via MySQL binary log (binlog) with proper user permissions
+3. **Kafka** streams change events with topic routing (`mysql.banking.*` → `mysql.inventory.*`)
+4. **MongoDB Atlas Cluster 1** receives real-time data via Kafka Connect sink connector
+5. **Aggregation Service** processes data and creates analytics in Cluster 2
+6. **Change Streams** enable real-time analytics updates
 
 ### Key Components
 
@@ -906,6 +914,105 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 │   └── generate-sample-data.py
 ├── requirements.txt
 └── README.md
+```
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. MySQL Connector Permission Errors
+**Error**: `Access denied; you need (at least one of) the RELOAD or FLUSH_TABLES privilege(s)`
+
+**Solution**: The MySQL user needs proper privileges. This is automatically handled by the init scripts, but if you encounter this:
+```bash
+# Connect to MySQL and grant privileges
+kubectl exec -n odl-demo deployment/mysql -- mysql -u root -p mysql_password -e "
+GRANT RELOAD, FLUSH_TABLES ON *.* TO 'odl_user'@'%';
+GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'odl_user'@'%';
+GRANT SELECT ON banking.* TO 'odl_user'@'%';
+FLUSH PRIVILEGES;
+"
+```
+
+#### 2. Schema History Configuration Errors
+**Error**: `Error configuring an instance of KafkaSchemaHistory`
+
+**Solution**: The connector now uses file-based schema history. If you still see this error:
+```bash
+# Delete and recreate the connector
+curl -X DELETE http://localhost:8083/connectors/mysql-connector
+curl -X POST -H "Content-Type: application/json" \
+  --data @k8s/connectors/debezium-mysql-connector-hostnetwork.json \
+  http://localhost:8083/connectors
+```
+
+#### 3. MongoDB Connector Topic Errors
+**Error**: `Unknown topic: customers, must be one of: [mysql.inventory.customers, ...]`
+
+**Solution**: The connector configuration has been updated to handle topic routing properly. Recreate the connector:
+```bash
+curl -X DELETE http://localhost:8083/connectors/mongodb-atlas-connector
+curl -X POST -H "Content-Type: application/json" \
+  --data @k8s/connectors/mongodb-atlas-connector.json \
+  http://localhost:8083/connectors
+```
+
+#### 4. No Messages in Kafka Topics
+**Checklist**:
+1. Verify MySQL connector is RUNNING: `curl http://localhost:8083/connectors/mysql-connector/status`
+2. Check MySQL binary log is enabled: `kubectl exec -n odl-demo deployment/mysql -- mysql -u root -p mysql_password -e "SHOW VARIABLES LIKE 'log_bin';"`
+3. Make test changes in MySQL: `kubectl exec -n odl-demo deployment/mysql -- mysql -u root -p mysql_password -e "USE banking; INSERT INTO customers (first_name, last_name, email) VALUES ('Test', 'User', 'test@example.com');"`
+4. Check Kafka topics: `kubectl exec -n odl-demo deployment/kafka -- kafka-topics --bootstrap-server localhost:9092 --list`
+
+#### 5. Aggregation Service Data Structure Issues
+**Error**: Aggregation service not processing data correctly
+
+**Solution**: The service has been updated for the new flat data structure. Redeploy:
+```bash
+# Update configmap and restart
+kubectl create configmap aggregation-source -n odl-demo \
+  --from-file=package.json=microservices/aggregation-service/package.json \
+  --from-file=index.js=microservices/aggregation-service/index.js \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/aggregation-service -n odl-demo
+```
+
+### Debug Commands
+
+#### Check All Services
+```bash
+# Check pod status
+kubectl get pods -n odl-demo
+
+# Check service status
+kubectl get services -n odl-demo
+
+# Check connector status
+curl http://localhost:8083/connectors
+```
+
+#### Check Data Flow
+```bash
+# Check MySQL data
+kubectl exec -n odl-demo deployment/mysql -- mysql -u root -p mysql_password -e "USE banking; SELECT COUNT(*) FROM customers;"
+
+# Check Kafka topics
+kubectl exec -n odl-demo deployment/kafka -- kafka-topics --bootstrap-server localhost:9092 --list
+
+# Check MongoDB data (if accessible)
+kubectl exec -n odl-demo deployment/aggregation-service -- curl http://localhost:3000/stats
+```
+
+#### View Logs
+```bash
+# MySQL logs
+kubectl logs -n odl-demo deployment/mysql --tail=50
+
+# Kafka Connect logs
+kubectl logs -n odl-demo deployment/kafka-connect --tail=50
+
+# Aggregation service logs
+kubectl logs -n odl-demo deployment/aggregation-service --tail=50
 ```
 
 ## Performance Tuning

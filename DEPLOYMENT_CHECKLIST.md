@@ -26,6 +26,7 @@
 - [ ] Update MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`
 - [ ] Replace `YOUR_PASSWORD` with actual `odl-writer` password in connector config
 - [ ] Make deployment scripts executable: `chmod +x scripts/*.sh`
+- [ ] **Note**: The aggregation service has been updated to work with the flat MySQL data structure (not nested)
 
 ## Deployment Steps
 
@@ -36,12 +37,14 @@
 
 ### 2. Configure Connectors
 - [ ] Wait for Kafka Connect to be ready (5-10 minutes): `kubectl wait --for=condition=ready pod -l app=kafka-connect -n odl-demo --timeout=300s`
-- [ ] Port-forward Kafka Connect: `kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo`
-- [ ] Deploy Debezium MySQL connector: `curl -X POST -H "Content-Type: application/json" --data @k8s/connectors/debezium-mysql-connector.json http://localhost:8083/connectors`
+- [ ] **For Host Networking**: Connectors are automatically deployed by the script
+- [ ] **For Regular Deployment**: Port-forward Kafka Connect: `kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo`
+- [ ] Deploy Debezium MySQL connector: `curl -X POST -H "Content-Type: application/json" --data @k8s/connectors/debezium-mysql-connector-hostnetwork.json http://localhost:8083/connectors`
 - [ ] Deploy MongoDB Atlas connector: `curl -X POST -H "Content-Type: application/json" --data @k8s/connectors/mongodb-atlas-connector.json http://localhost:8083/connectors`
 - [ ] Verify connectors are running: `curl http://localhost:8083/connectors`
 - [ ] Check MySQL connector status: `curl http://localhost:8083/connectors/mysql-connector/status`
 - [ ] Check MongoDB Atlas connector status: `curl http://localhost:8083/connectors/mongodb-atlas-connector/status`
+- [ ] **IMPORTANT**: If MySQL connector fails with permission errors, the init scripts should handle this automatically
 
 ### 3. Generate Sample Data
 - [ ] **Option 1 (Recommended)**: Set up port forwarding: `kubectl port-forward service/mysql-service 3306:3306 -n odl-demo`
@@ -90,11 +93,61 @@
 ## Troubleshooting
 
 ### Common Issues
-- [ ] MySQL connection issues - check logs and credentials
-- [ ] Kafka Connect issues - verify connector configurations and connection strings
-- [ ] MongoDB Atlas connection - check IP whitelist and credentials
-- [ ] Aggregation service issues - check logs and environment variables
-- [ ] Connector deployment failures - check Kafka Connect logs and connector status
+
+#### MySQL Connector Permission Errors
+- [ ] **Error**: `Access denied; you need (at least one of) the RELOAD or FLUSH_TABLES privilege(s)`
+- [ ] **Solution**: The init scripts should handle this automatically, but if not:
+  ```bash
+  kubectl exec -n odl-demo deployment/mysql -- mysql -u root -p mysql_password -e "
+  GRANT RELOAD, FLUSH_TABLES ON *.* TO 'odl_user'@'%';
+  GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'odl_user'@'%';
+  GRANT SELECT ON banking.* TO 'odl_user'@'%';
+  FLUSH PRIVILEGES;
+  "
+  ```
+
+#### Schema History Configuration Errors
+- [ ] **Error**: `Error configuring an instance of KafkaSchemaHistory`
+- [ ] **Solution**: Delete and recreate the connector:
+  ```bash
+  curl -X DELETE http://localhost:8083/connectors/mysql-connector
+  curl -X POST -H "Content-Type: application/json" \
+    --data @k8s/connectors/debezium-mysql-connector-hostnetwork.json \
+    http://localhost:8083/connectors
+  ```
+
+#### MongoDB Connector Topic Errors
+- [ ] **Error**: `Unknown topic: customers, must be one of: [mysql.inventory.customers, ...]`
+- [ ] **Solution**: Delete and recreate the connector:
+  ```bash
+  curl -X DELETE http://localhost:8083/connectors/mongodb-atlas-connector
+  curl -X POST -H "Content-Type: application/json" \
+    --data @k8s/connectors/mongodb-atlas-connector.json \
+    http://localhost:8083/connectors
+  ```
+
+#### No Messages in Kafka Topics
+- [ ] Check MySQL connector status: `curl http://localhost:8083/connectors/mysql-connector/status`
+- [ ] Check MySQL binary log: `kubectl exec -n odl-demo deployment/mysql -- mysql -u root -p mysql_password -e "SHOW VARIABLES LIKE 'log_bin';"`
+- [ ] Make test changes in MySQL and verify they appear in Kafka
+
+#### Aggregation Service Issues
+- [ ] **Error**: Service not processing data correctly
+- [ ] **Solution**: Update and restart the service:
+  ```bash
+  kubectl create configmap aggregation-source -n odl-demo \
+    --from-file=package.json=microservices/aggregation-service/package.json \
+    --from-file=index.js=microservices/aggregation-service/index.js \
+    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl rollout restart deployment/aggregation-service -n odl-demo
+  ```
+
+### Debug Commands
+- [ ] Check all pods: `kubectl get pods -n odl-demo`
+- [ ] Check connector status: `curl http://localhost:8083/connectors`
+- [ ] View MySQL logs: `kubectl logs -n odl-demo deployment/mysql --tail=50`
+- [ ] View Kafka Connect logs: `kubectl logs -n odl-demo deployment/kafka-connect --tail=50`
+- [ ] View aggregation service logs: `kubectl logs -n odl-demo deployment/aggregation-service --tail=50`
 - [ ] Data not flowing to MongoDB - verify connector status and topic routing
 
 ### Recovery Steps
