@@ -7,7 +7,7 @@ This repository contains a complete demo of an Operational Data Layer using Mong
 ```
 MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary ODL) → MongoDB Atlas Cluster 2 (Analytics/Subset)
                     ↓
-            Load Balancer (MetalLB) → External Access (MySQL: 10.64.140.43, Kafka UI: 10.64.140.44)
+            NodePort Services → External Access (MySQL: VM_IP:3306, Kafka UI: VM_IP:8080)
 ```
 
 ### Key Components
@@ -18,7 +18,7 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - **Primary ODL**: MongoDB Atlas Cluster 1 (full dataset)
 - **Analytics Layer**: MongoDB Atlas Cluster 2 (transformed subset)
 - **Orchestration**: MicroK8s for container orchestration
-- **Load Balancer**: MetalLB for external service access
+- **Service Exposure**: NodePort services for external access
 - **Transformation Layer**: Node.js microservices for data processing
 - **Data Generation**: Python scripts for sample data creation
 
@@ -66,8 +66,7 @@ microk8s enable dns
 microk8s enable storage
 microk8s enable ingress
 
-# Enable load balancer for easier access to services (default behavior)
-microk8s enable metallb
+# Note: NodePort services are used for external access (no additional add-ons needed)
 
 # Optional: Enable dashboard for monitoring
 microk8s enable dashboard
@@ -176,7 +175,7 @@ pip install -r requirements.txt
 ### 2. Enable MicroK8s Add-ons
 ```bash
 # Enable required add-ons
-microk8s enable dns storage ingress metallb
+microk8s enable dns storage ingress
 
 # Optional: Enable dashboard for monitoring
 microk8s enable dashboard
@@ -230,14 +229,14 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 
 ### 5. Deploy Everything
 
-#### Option 1: Default Deployment (Load Balancer - Recommended)
+#### Option 1: Default Deployment (NodePort Services - Recommended)
 ```bash
 ./scripts/deploy.sh
 ```
 
 #### Option 2: Port Forwarding Only
 ```bash
-./scripts/deploy.sh --no-loadbalancer
+./scripts/deploy.sh --port-forward
 ```
 
 **Note**: The deployment script automatically handles Kafka Connect connector deployment after Kafka Connect is ready. You don't need to manually deploy the connectors.
@@ -250,23 +249,23 @@ kubectl get services -n odl-demo
 
 ### 7. Access Services
 
-#### Option 1: Load Balancer (Default - Recommended)
+#### Option 1: NodePort Services (Default - Recommended)
 ```bash
-# Deploy with load balancer (default behavior)
+# Deploy with NodePort services (default behavior)
 ./scripts/deploy.sh
 
-# After deployment, access services directly via external IPs:
-# MySQL: mysql://odl_user:odl_password@10.64.140.43:3306/banking
-# Kafka UI: http://10.64.140.44:8080
+# After deployment, access services directly via VM IP:
+# MySQL: mysql://odl_user:odl_password@YOUR_VM_IP:3306/banking
+# Kafka UI: http://YOUR_VM_IP:8080
 
-# Check load balancer status
-kubectl get services -n odl-demo | grep loadbalancer
+# Check NodePort services status
+kubectl get services -n odl-demo | grep nodeport
 ```
 
 #### Option 2: Port Forwarding Only
 ```bash
-# Deploy without load balancer
-./scripts/deploy.sh --no-loadbalancer
+# Deploy without NodePort services
+./scripts/deploy.sh --port-forward
 
 # Then use port forwarding:
 kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
@@ -281,16 +280,16 @@ Kafka UI provides a web-based interface for monitoring and managing your Kafka c
 
 ### Accessing Kafka UI
 
-#### Load Balancer Access (Recommended)
+#### NodePort Access (Recommended)
 ```bash
-# Access via external IP
-http://10.64.140.44:8080
+# Access via VM IP
+http://YOUR_VM_IP:8080
 ```
 
 #### Port Forwarding Access
 ```bash
 # Set up port forwarding
-kubectl port-forward service/kafka-ui-loadbalancer 8080:8080 -n odl-demo
+kubectl port-forward service/kafka-ui-service 8080:8080 -n odl-demo
 
 # Access via localhost
 http://localhost:8080
@@ -524,34 +523,37 @@ kubectl exec -it deployment/kafka -n odl-demo -- kafka-console-consumer \
   --topic mysql.inventory.customers
 ```
 
-## Load Balancer Configuration
+## NodePort Service Configuration
 
-The demo uses MetalLB for load balancing with the following IP allocation:
+The demo uses NodePort services for external access with the following port allocation:
 
-- **IP Range**: `10.64.140.43-10.64.140.49`
-- **MySQL Load Balancer**: `10.64.140.43:3306`
-- **Kafka UI Load Balancer**: `10.64.140.44:8080`
+- **MySQL NodePort**: `VM_IP:3306`
+- **Kafka UI NodePort**: `VM_IP:8080`
 
-### Benefits of Load Balancer
+### Benefits of NodePort Services
 
-- **No Port Forwarding**: Direct external access to services
-- **Predictable IPs**: Fixed IP addresses for easy connection
-- **Better for Demos**: Share IPs directly with others
-- **Production-like**: More realistic than port forwarding
-- **Persistent Access**: Services remain accessible across sessions
+- **No Additional Add-ons**: Works out of the box with any Kubernetes cluster
+- **Direct Access**: Services accessible directly on VM's external IP
+- **Standard Ports**: Uses standard application ports (3306 for MySQL, 8080 for Kafka UI)
+- **Simple Setup**: No complex load balancer configuration required
+- **Firewall Friendly**: Easy to configure firewall rules for specific ports
 
-### Load Balancer Management
+### NodePort Service Management
 
 ```bash
-# Check load balancer status
-kubectl get services -n odl-demo | grep loadbalancer
+# Check NodePort services status
+kubectl get services -n odl-demo | grep nodeport
 
-# Check MetalLB status
-kubectl get pods -n metallb-system
+# View NodePort service details
+kubectl describe service mysql-nodeport -n odl-demo
+kubectl describe service kafka-ui-nodeport -n odl-demo
 
-# View load balancer details
-kubectl describe service mysql-loadbalancer -n odl-demo
-kubectl describe service kafka-ui-loadbalancer -n odl-demo
+# Get VM IP address
+kubectl get nodes -o wide
+
+# Test service connectivity
+telnet YOUR_VM_IP 3306  # MySQL
+curl http://YOUR_VM_IP:8080  # Kafka UI
 ```
 
 ## Demo Script
@@ -701,31 +703,31 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
      http://localhost:8083/connectors
    ```
 
-6. **Load Balancer Issues**
+6. **NodePort Service Issues**
    ```bash
-   # Check if MetalLB is running
-   kubectl get pods -n metallb-system
+   # Check NodePort services status
+   kubectl get services -n odl-demo | grep nodeport
    
-   # Check load balancer services
-   kubectl get services -n odl-demo | grep loadbalancer
+   # Check if services are running
+   kubectl describe service mysql-nodeport -n odl-demo
+   kubectl describe service kafka-ui-nodeport -n odl-demo
    
-   # Check MetalLB logs
-   kubectl logs -n metallb-system -l app=metallb
+   # Verify VM IP is accessible
+   kubectl get nodes -o wide
+   ping YOUR_VM_IP
    
-   # If services don't get external IPs, check IP pool configuration
-   kubectl get configmap -n metallb-system config -o yaml
+   # Test port connectivity
+   telnet YOUR_VM_IP 3306  # MySQL
+   telnet YOUR_VM_IP 8080  # Kafka UI
    
-   # Verify IP range is available on your network
-   ping 10.64.140.43
-   ping 10.64.140.44
+   # Check firewall rules (if applicable)
+   sudo ufw status
+   sudo iptables -L
    
-   # Restart MetalLB if needed
-   microk8s disable metallb
-   microk8s enable metallb
-   
-   # Recreate load balancer services
-   kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer -n odl-demo
-   kubectl apply -f k8s/loadbalancer/
+   # Restart NodePort services if needed
+   kubectl delete service mysql-nodeport kafka-ui-nodeport -n odl-demo
+   kubectl apply -f k8s/loadbalancer/mysql-nodeport.yaml
+   kubectl apply -f k8s/loadbalancer/kafka-ui-nodeport.yaml
    ```
 
 7. **Kafka UI Issues**
@@ -737,13 +739,13 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
    kubectl logs deployment/kafka-ui -n odl-demo
    
    # Check Kafka UI service
-   kubectl get service kafka-ui-loadbalancer -n odl-demo
+   kubectl get service kafka-ui-nodeport -n odl-demo
    
    # Verify Kafka UI can connect to Kafka
    kubectl exec -it deployment/kafka-ui -n odl-demo -- curl http://localhost:8080/actuator/health
    
    # Check if Kafka UI is accessible via port forwarding
-   kubectl port-forward service/kafka-ui-loadbalancer 8080:8080 -n odl-demo
+   kubectl port-forward service/kafka-ui-service 8080:8080 -n odl-demo
    # Then test: curl http://localhost:8080
    
    # Restart Kafka UI if needed
@@ -808,9 +810,8 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 │   ├── monitoring/
 │   │   └── health-checks.yaml
 │   └── loadbalancer/
-│       ├── metallb-config.yaml
-│       ├── mysql-loadbalancer.yaml
-│       └── kafka-ui-loadbalancer.yaml
+│       ├── mysql-nodeport.yaml
+│       └── kafka-ui-nodeport.yaml
 ├── microservices/
 │   └── aggregation-service/
 │       ├── package.json
