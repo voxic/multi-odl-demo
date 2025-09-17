@@ -46,7 +46,8 @@ kubectl delete deployment mysql kafka zookeeper kafka-connect aggregation-servic
 # Delete services
 kubectl delete service mysql-service kafka-service zookeeper-service kafka-connect-service aggregation-service -n odl-demo --ignore-not-found=true
 
-# Delete load balancer services
+# Delete load balancer services (both in default and odl-demo namespaces)
+kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer --ignore-not-found=true
 kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer -n odl-demo --ignore-not-found=true
 
 # Delete PVCs

@@ -63,11 +63,11 @@ microk8s enable dns
 microk8s enable storage
 microk8s enable ingress
 
+# Enable load balancer for easier access to services (default behavior)
+microk8s enable metallb
+
 # Optional: Enable dashboard for monitoring
 microk8s enable dashboard
-
-# Optional: Enable load balancer for easier access to services
-microk8s enable metallb
 
 # Check status
 microk8s status
@@ -217,8 +217,15 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 **Important**: Replace `YOUR_PASSWORD` with your actual MongoDB Atlas password for the `odl-writer` user.
 
 ### 4. Deploy Everything
+
+#### Option 1: Default Deployment (Load Balancer - Recommended)
 ```bash
 ./scripts/deploy.sh
+```
+
+#### Option 2: Port Forwarding Only
+```bash
+./scripts/deploy.sh --no-loadbalancer
 ```
 
 **Note**: The deployment script automatically handles Kafka Connect connector deployment after Kafka Connect is ready. You don't need to manually deploy the connectors.
@@ -231,29 +238,26 @@ kubectl get services -n odl-demo
 
 ### 6. Access Services
 
-#### Option 1: Port Forwarding (Default)
+#### Option 1: Load Balancer (Default - Recommended)
 ```bash
-# MySQL
-kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
+# Deploy with load balancer (default behavior)
+./scripts/deploy.sh
 
-# Kafka
-kubectl port-forward service/kafka-service 9092:9092 -n odl-demo
-
-# Kafka Connect
-kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo
-
-# Aggregation Service
-kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo
+# After deployment, access services directly via external IPs:
+# MySQL: mysql://odl_user:odl_password@10.64.140.43:3306/banking
+# Kafka UI: http://10.64.140.44:8080
 ```
 
-#### Option 2: Load Balancer (Easier Access)
+#### Option 2: Port Forwarding Only
 ```bash
-# Setup load balancer for MySQL and Kafka UI
-./scripts/setup-loadbalancer.sh
+# Deploy without load balancer
+./scripts/deploy.sh --no-loadbalancer
 
-# After setup, access services directly via external IPs:
-# MySQL: mysql://odl_user:odl_password@<EXTERNAL_IP>:3306/banking
-# Kafka UI: http://<EXTERNAL_IP>:8080
+# Then use port forwarding:
+kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
+kubectl port-forward service/kafka-service 9092:9092 -n odl-demo
+kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo
+kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo
 ```
 
 ## Demo Script
@@ -457,7 +461,6 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 ├── scripts/
 │   ├── deploy.sh
 │   ├── cleanup.sh
-│   ├── setup-loadbalancer.sh
 │   └── generate-sample-data.py
 ├── requirements.txt
 └── README.md

@@ -178,6 +178,48 @@ kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: ap
 
 print_status "🎉 Deployment completed successfully!"
 
+# Setup Load Balancer (Default behavior)
+if [ "$1" != "--no-loadbalancer" ] && [ "$1" != "--port-forward" ]; then
+    echo ""
+    print_status "🌐 Setting up Load Balancer..."
+    
+    # Check if MetalLB is enabled
+    if microk8s status | grep -q "metallb: enabled"; then
+        print_status "MetalLB is already enabled"
+    else
+        print_status "Enabling MetalLB add-on..."
+        microk8s enable metallb
+        
+        # Wait for MetalLB to be ready
+        print_status "Waiting for MetalLB to be ready..."
+        kubectl wait --for=condition=available --timeout=300s deployment/controller -n metallb-system
+    fi
+    
+    # Apply MetalLB configuration
+    print_status "Applying MetalLB configuration..."
+    kubectl apply -f k8s/loadbalancer/metallb-config.yaml
+    
+    # Wait a moment for the configuration to be applied
+    sleep 10
+    
+    # Clean up any existing services in wrong namespace
+    print_status "Cleaning up any existing load balancer services..."
+    kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer --ignore-not-found=true
+    kubectl delete service mysql-loadbalancer kafka-ui-loadbalancer -n odl-demo --ignore-not-found=true
+    
+    # Apply load balancer services
+    print_status "Creating load balancer services..."
+    kubectl apply -f k8s/loadbalancer/mysql-loadbalancer.yaml
+    kubectl apply -f k8s/loadbalancer/kafka-ui-loadbalancer.yaml
+    
+    # Wait for services to get external IPs
+    print_status "Waiting for load balancer IPs to be assigned..."
+    kubectl wait --for=condition=ready --timeout=300s service/mysql-loadbalancer -n odl-demo || true
+    kubectl wait --for=condition=ready --timeout=300s service/kafka-ui-loadbalancer -n odl-demo || true
+    
+    print_status "✅ Load balancer setup completed!"
+fi
+
 # Display service information
 echo ""
 print_status "Service Information:"
@@ -186,10 +228,36 @@ echo "[$(get_timestamp)] Kafka: kubectl port-forward service/kafka-service 9092:
 echo "[$(get_timestamp)] Kafka Connect: kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo"
 echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
 
-echo ""
-print_status "Load Balancer Setup (Optional):"
-echo "[$(get_timestamp)] To expose MySQL and Kafka UI via load balancer:"
-echo "[$(get_timestamp)] ./scripts/setup-loadbalancer.sh"
+# Show load balancer information if enabled
+if [ "$1" != "--no-loadbalancer" ] && [ "$1" != "--port-forward" ]; then
+    echo ""
+    print_status "Load Balancer Services:"
+    echo "[$(get_timestamp)] MySQL Load Balancer: kubectl get service mysql-loadbalancer -n odl-demo"
+    echo "[$(get_timestamp)] Kafka UI Load Balancer: kubectl get service kafka-ui-loadbalancer -n odl-demo"
+    
+    # Get external IPs
+    MYSQL_IP=$(kubectl get service mysql-loadbalancer -n odl-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "Pending")
+    KAFKA_UI_IP=$(kubectl get service kafka-ui-loadbalancer -n odl-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "Pending")
+    
+    echo ""
+    print_status "External Access URLs:"
+    if [ "$MYSQL_IP" != "Pending" ] && [ "$MYSQL_IP" != "" ]; then
+        echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@$MYSQL_IP:3306/banking"
+    else
+        echo "[$(get_timestamp)] MySQL: External IP pending... (check with: kubectl get service mysql-loadbalancer -n odl-demo)"
+    fi
+    
+    if [ "$KAFKA_UI_IP" != "Pending" ] && [ "$KAFKA_UI_IP" != "" ]; then
+        echo "[$(get_timestamp)] Kafka UI: http://$KAFKA_UI_IP:8080"
+    else
+        echo "[$(get_timestamp)] Kafka UI: External IP pending... (check with: kubectl get service kafka-ui-loadbalancer -n odl-demo)"
+    fi
+else
+    echo ""
+    print_status "Port Forwarding Mode:"
+    echo "[$(get_timestamp)] Load balancer disabled. Using port forwarding for service access."
+    echo "[$(get_timestamp)] To enable load balancer: ./scripts/deploy.sh"
+fi
 
 echo ""
 print_status "To check the status of all pods:"
