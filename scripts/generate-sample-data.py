@@ -374,25 +374,43 @@ def generate_and_insert_data() -> None:
                 %(customer_status)s, %(created_at)s, %(updated_at)s)
         """
         
+        inserted_customer_ids = set()
         for customer in customers:
             try:
                 cursor.execute(customer_insert_query, customer)
+                # Get the inserted customer ID
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                customer_id = cursor.fetchone()[0]
+                inserted_customer_ids.add(customer_id)
             except Error as e:
                 if "Duplicate entry" in str(e):
                     print(f"Skipping duplicate customer: {customer['email']}")
+                    # Try to find existing customer ID
+                    cursor.execute("SELECT customer_id FROM customers WHERE email = %s", (customer['email'],))
+                    result = cursor.fetchone()
+                    if result:
+                        inserted_customer_ids.add(result[0])
                     continue
                 else:
                     raise
         
-        # Generate accounts
+        print(f"Successfully processed {len(inserted_customer_ids)} customers")
+        
+        # Generate accounts only for customers that exist
         accounts = []
-        for customer_id in range(1, CONFIG['customers'] + 1):
+        for customer_id in inserted_customer_ids:
             num_accounts = random_between(CONFIG['accounts_per_customer']['min'], 
                                         CONFIG['accounts_per_customer']['max'])
             for account_counter in range(1, num_accounts + 1):
                 accounts.append(generate_account(customer_id, account_counter))
         
-        # Insert accounts
+        # Generate agreements only for customers that have accounts
+        agreements = []
+        customers_with_agreements = int(len(inserted_customer_ids) * CONFIG['agreements_percentage'] / 100)
+        agreement_counter = 1
+        processed_customers = 0
+        
+        # First, we need to insert accounts to get their IDs
         print(f"Inserting {len(accounts)} accounts...")
         account_insert_query = """
         INSERT INTO accounts (customer_id, account_number, account_type, balance, 
@@ -403,9 +421,15 @@ def generate_and_insert_data() -> None:
                 %(opened_date)s, %(closed_date)s, %(created_at)s, %(updated_at)s)
         """
         
+        inserted_accounts = []
         for account in accounts:
             try:
                 cursor.execute(account_insert_query, account)
+                # Get the inserted account ID
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                account_id = cursor.fetchone()[0]
+                account['account_id'] = account_id  # Add the ID to the account dict
+                inserted_accounts.append(account)
             except Error as e:
                 if "Duplicate entry" in str(e):
                     print(f"Skipping duplicate account: {account['account_number']}")
@@ -413,9 +437,11 @@ def generate_and_insert_data() -> None:
                 else:
                     raise
         
-        # Generate transactions
+        print(f"Successfully processed {len(inserted_accounts)} accounts")
+        
+        # Generate transactions using inserted accounts
         transactions = []
-        for account in accounts:
+        for account in inserted_accounts:
             for _ in range(CONFIG['transactions_per_account']):
                 transactions.append(generate_transaction(account['account_id']))
         
@@ -434,16 +460,16 @@ def generate_and_insert_data() -> None:
         for transaction in transactions:
             cursor.execute(transaction_insert_query, transaction)
         
-        # Generate agreements
-        agreements = []
-        customers_with_agreements = int(CONFIG['customers'] * CONFIG['agreements_percentage'] / 100)
-        agreement_counter = 1
-        for i in range(1, customers_with_agreements + 1):
-            customer_accounts = [acc for acc in accounts if acc['customer_id'] == i]
+        # Now generate agreements using the inserted accounts
+        for customer_id in inserted_customer_ids:
+            if processed_customers >= customers_with_agreements:
+                break
+            customer_accounts = [acc for acc in inserted_accounts if acc['customer_id'] == customer_id]
             if customer_accounts:
                 account = random_choice(customer_accounts)
-                agreements.append(generate_agreement(i, account['account_id'], agreement_counter))
+                agreements.append(generate_agreement(customer_id, account['account_id'], agreement_counter))
                 agreement_counter += 1
+                processed_customers += 1
         
         # Insert agreements
         print(f"Inserting {len(agreements)} agreements...")
