@@ -6,19 +6,19 @@
     "topics": "mysql.inventory.customers,mysql.inventory.accounts,mysql.inventory.transactions,mysql.inventory.agreements",
     "connection.uri": "mongodb+srv://odl-writer:${env:MONGO_PASSWORD}@cluster1.mongodb.net/banking?retryWrites=true&w=majority",
     "database": "banking",
-    "collection": "customers",
+    "collection": "${topic}",
     "document.id.strategy": "com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy",
-    "document.id.strategy.partial.value.projection.list": "customer_id",
+    "document.id.strategy.partial.value.projection.list": "customer_id,account_id,transaction_id,agreement_id",
     "document.id.strategy.partial.value.projection.type": "AllowList",
     "writemodel.strategy": "com.mongodb.kafka.connect.sink.writemodel.strategy.ReplaceOneBusinessKeyStrategy",
-    "writemodel.strategy.replace.one.filter.field.name": "customer_id",
+    "writemodel.strategy.replace.one.filter.field.name": "customer_id,account_id,transaction_id,agreement_id",
+    "topic.override.mysql.inventory.customers.collection": "customers",
+    "topic.override.mysql.inventory.accounts.collection": "accounts", 
+    "topic.override.mysql.inventory.transactions.collection": "transactions",
+    "topic.override.mysql.inventory.agreements.collection": "agreements",
     "key.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "key.converter.schemas.enable": "false",
-    "value.converter.schemas.enable": "false",
-    "transforms": "route",
-    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
-    "transforms.route.regex": "mysql.inventory.(.*)",
-    "transforms.route.replacement": "$1"
+    "value.converter.schemas.enable": "false"
   }
 }
