@@ -58,6 +58,8 @@ async function aggregateCustomerData(customerId) {
       return;
     }
     
+    logger.info(`Processing customer ${customerId}: ${customer.first_name} ${customer.last_name}`);
+    
     // Get customer accounts
     const accounts = await db1.collection('accounts').find({ customer_id: customerId }).toArray();
     
@@ -71,8 +73,8 @@ async function aggregateCustomerData(customerId) {
     }).toArray();
     
     // Calculate aggregated data
-    const totalBalance = accounts.reduce((sum, acc) => sum + (acc.financial_info?.balance || 0), 0);
-    const accountTypes = [...new Set(accounts.map(acc => acc.account_details?.account_type))];
+    const totalBalance = accounts.reduce((sum, acc) => sum + safeNumber(acc.balance), 0);
+    const accountTypes = [...new Set(accounts.map(acc => acc.account_type).filter(Boolean))];
     const avgMonthlyTransactions = Math.round(transactions.length / 1); // Simplified for demo
     
     const lastTransactionDate = transactions.length > 0 
@@ -83,10 +85,10 @@ async function aggregateCustomerData(customerId) {
     const analyticsDoc = {
       customer_id: customerId,
       profile: {
-        name: `${customer.personal_info?.first_name || ''} ${customer.personal_info?.last_name || ''}`.trim(),
-        email: customer.personal_info?.email || '',
-        location: `${customer.address?.city || ''}, ${customer.address?.state || ''}`.trim(),
-        status: customer.status || 'UNKNOWN'
+        name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+        email: customer.email || '',
+        location: `${customer.city || ''}, ${customer.state || ''}`.trim(),
+        status: customer.customer_status || 'UNKNOWN'
       },
       financial_summary: {
         total_accounts: accounts.length,
@@ -137,6 +139,12 @@ function calculateTransactionPattern(transactionCount) {
   return 'LOW';
 }
 
+// Helper function to safely get numeric values
+function safeNumber(value, defaultValue = 0) {
+  const num = parseFloat(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
 // Process all customers
 async function processAllCustomers() {
   if (isProcessing) {
@@ -179,6 +187,7 @@ async function setupChangeStreams() {
       if (change.operationType === 'insert' || change.operationType === 'update') {
         const customerId = change.fullDocument?.customer_id || change.documentKey?.customer_id;
         if (customerId) {
+          logger.info(`Triggering aggregation for customer ${customerId} due to customer change`);
           await aggregateCustomerData(customerId);
         }
       }
@@ -191,7 +200,25 @@ async function setupChangeStreams() {
       if (change.operationType === 'insert' || change.operationType === 'update') {
         const customerId = change.fullDocument?.customer_id || change.documentKey?.customer_id;
         if (customerId) {
+          logger.info(`Triggering aggregation for customer ${customerId} due to account change`);
           await aggregateCustomerData(customerId);
+        }
+      }
+    });
+    
+    // Watch for changes in transactions collection
+    const transactionsStream = db1.collection('transactions').watch();
+    transactionsStream.on('change', async (change) => {
+      logger.info('Transaction change detected:', change.operationType);
+      if (change.operationType === 'insert' || change.operationType === 'update') {
+        const accountId = change.fullDocument?.account_id || change.documentKey?.account_id;
+        if (accountId) {
+          // Find the customer for this account
+          const account = await db1.collection('accounts').findOne({ account_id: accountId });
+          if (account && account.customer_id) {
+            logger.info(`Triggering aggregation for customer ${account.customer_id} due to transaction change`);
+            await aggregateCustomerData(account.customer_id);
+          }
         }
       }
     });
