@@ -19,6 +19,99 @@ const config = {
   dataTimeline: 30 // days
 };
 
+// Table creation SQL
+const createTablesSQL = `
+-- Create customers table
+CREATE TABLE IF NOT EXISTS customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    date_of_birth DATE,
+    address_line1 VARCHAR(100),
+    address_line2 VARCHAR(100),
+    city VARCHAR(50),
+    state VARCHAR(10),
+    postal_code VARCHAR(10),
+    country VARCHAR(50),
+    customer_status ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED') DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Create accounts table
+CREATE TABLE IF NOT EXISTS accounts (
+    account_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    account_number VARCHAR(50) UNIQUE NOT NULL,
+    account_type ENUM('CHECKING', 'SAVINGS', 'CREDIT', 'LOAN') NOT NULL,
+    balance DECIMAL(15,2) DEFAULT 0.00,
+    currency VARCHAR(3) DEFAULT 'USD',
+    account_status ENUM('ACTIVE', 'FROZEN', 'CLOSED') DEFAULT 'ACTIVE',
+    interest_rate DECIMAL(5,4) DEFAULT 0.0000,
+    credit_limit DECIMAL(15,2),
+    opened_date DATE,
+    closed_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
+);
+
+-- Create transactions table
+CREATE TABLE IF NOT EXISTS transactions (
+    transaction_id INT AUTO_INCREMENT PRIMARY KEY,
+    account_id INT NOT NULL,
+    transaction_type ENUM('DEPOSIT', 'WITHDRAWAL', 'TRANSFER_IN', 'TRANSFER_OUT', 'PAYMENT', 'FEE') NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD',
+    description TEXT,
+    reference_number VARCHAR(50),
+    counterparty_account VARCHAR(50),
+    transaction_date DATETIME,
+    posted_date DATETIME,
+    status ENUM('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED') DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
+);
+
+-- Create agreements table
+CREATE TABLE IF NOT EXISTS agreements (
+    agreement_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    account_id INT NOT NULL,
+    agreement_type ENUM('LOAN', 'CREDIT_CARD', 'OVERDRAFT', 'INVESTMENT') NOT NULL,
+    agreement_number VARCHAR(50) UNIQUE NOT NULL,
+    principal_amount DECIMAL(15,2) NOT NULL,
+    current_balance DECIMAL(15,2) DEFAULT 0.00,
+    interest_rate DECIMAL(5,4) NOT NULL,
+    term_months INT,
+    payment_amount DECIMAL(15,2),
+    payment_frequency ENUM('MONTHLY', 'QUARTERLY', 'ANNUALLY'),
+    start_date DATE,
+    end_date DATE,
+    status ENUM('ACTIVE', 'COMPLETED', 'DEFAULTED', 'CANCELLED') DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
+);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(customer_status);
+CREATE INDEX IF NOT EXISTS idx_accounts_customer_id ON accounts(customer_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(account_type);
+CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(account_status);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
+CREATE INDEX IF NOT EXISTS idx_agreements_customer_id ON agreements(customer_id);
+CREATE INDEX IF NOT EXISTS idx_agreements_account_id ON agreements(account_id);
+CREATE INDEX IF NOT EXISTS idx_agreements_type ON agreements(agreement_type);
+`;
+
 // Sample data generators
 const firstNames = ['John', 'Jane', 'Michael', 'Sarah', 'David', 'Emily', 'Robert', 'Jessica', 'William', 'Ashley'];
 const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
@@ -127,12 +220,38 @@ function generateAgreement(customerId, accountId) {
   };
 }
 
+async function createTables(connection) {
+  try {
+    console.log('Creating database tables...');
+    
+    // Split the SQL into individual statements and execute them
+    const statements = createTablesSQL
+      .split(';')
+      .map(stmt => stmt.trim())
+      .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+    
+    for (const statement of statements) {
+      if (statement.trim()) {
+        await connection.execute(statement);
+      }
+    }
+    
+    console.log('Database tables created successfully!');
+  } catch (error) {
+    console.error('Error creating tables:', error);
+    throw error;
+  }
+}
+
 async function generateAndInsertData() {
   let connection;
   
   try {
     console.log('Connecting to MySQL database...');
     connection = await mysql.createConnection(dbConfig);
+    
+    // Create tables first
+    await createTables(connection);
     
     console.log('Generating sample data...');
     
