@@ -47,6 +47,8 @@ spec:
         - containerPort: 9092
         - containerPort: 9093
         env:
+        - name: CLUSTER_ID
+          value: "4L6g3nShT-eMCtK--X86sw"
         - name: KAFKA_PROCESS_ROLES
           value: "broker,controller"
         - name: KAFKA_NODE_ID
