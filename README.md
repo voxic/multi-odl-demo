@@ -281,6 +281,7 @@ kubectl get services -n odl-demo
 # MySQL: mysql://odl_user:odl_password@YOUR_VM_IP:3306/banking
 # Kafka UI: http://YOUR_VM_IP:8080
 # Kafka: YOUR_VM_IP:9092
+# Kafka Connect: http://YOUR_VM_IP:8083
 
 # No additional configuration needed - services are immediately accessible!
 ```
@@ -572,10 +573,11 @@ The demo uses host networking for direct access to standard ports with the follo
 - **MySQL**: `VM_IP:3306` (standard MySQL port)
 - **Kafka UI**: `VM_IP:8080` (standard web port)
 - **Kafka**: `VM_IP:9092` (standard Kafka port)
+- **Kafka Connect**: `VM_IP:8083` (standard Kafka Connect port)
 
 ### Benefits of Host Networking
 
-- **Standard Ports**: Uses native application ports (3306, 8080, 9092)
+- **Standard Ports**: Uses native application ports (3306, 8080, 9092, 8083)
 - **No Port Mapping**: Direct access without port translation
 - **Better Performance**: No network overhead from port forwarding
 - **Simpler Configuration**: No complex Kubernetes networking setup
@@ -599,6 +601,7 @@ kubectl get nodes -o wide
 telnet YOUR_VM_IP 3306  # MySQL
 curl http://YOUR_VM_IP:8080  # Kafka UI
 telnet YOUR_VM_IP 9092  # Kafka
+curl http://YOUR_VM_IP:8083  # Kafka Connect
 ```
 
 ## NodePort Service Configuration (Alternative)
@@ -877,9 +880,11 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 │   ├── kafka/
 │   │   ├── kafka-all-in-one.yaml
 │   │   ├── kafka-hostnetwork.yaml
-│   │   └── kafka-connect.yaml
+│   │   ├── kafka-connect.yaml
+│   │   └── kafka-connect-hostnetwork.yaml
 │   ├── connectors/
 │   │   ├── debezium-mysql-connector.json
+│   │   ├── debezium-mysql-connector-hostnetwork.json
 │   │   └── mongodb-atlas-connector.json
 │   ├── microservices/
 │   │   └── aggregation-service-deployment.yaml

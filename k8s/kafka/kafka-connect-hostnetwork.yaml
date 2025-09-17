@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect
+  labels:
+    app: kafka-connect
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-connect
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+    spec:
+      hostNetwork: true
+      initContainers:
+      - name: download-connectors
+        image: alpine:latest
+        command: 
+        - sh
+        - -c
+        - |
+          apk add --no-cache curl unzip tar
+          
+          # Create plugins directory
+          mkdir -p /kafka/connect/lib
+          mkdir -p /kafka/connect/config
+          
+          # Download MongoDB connector
+          echo "Downloading MongoDB connector..."
+          curl -L -o /tmp/mongodb-kafka-connect.zip https://github.com/mongodb/mongo-kafka/releases/download/r2.0.1/mongodb-kafka-connect-mongodb-2.0.1.zip
+          unzip /tmp/mongodb-kafka-connect.zip -d /tmp/
+          cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/lib/* /kafka/connect/lib/
+          
+          # Download Debezium MySQL connector plugin archive
+          echo "Downloading Debezium MySQL connector..."
+          curl -L -o /tmp/debezium-mysql-connector.tar.gz https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/2.4.1.Final/debezium-connector-mysql-2.4.1.Final-plugin.tar.gz
+          echo "Extracting Debezium connector..."
+          tar -xzf /tmp/debezium-mysql-connector.tar.gz -C /tmp/
+          echo "Contents of /tmp after extraction:"
+          ls -la /tmp/
+          echo "Looking for Debezium connector directory:"
+          find /tmp -name "*debezium*" -type d
+          echo "Contents of Debezium connector directory:"
+          ls -la /tmp/debezium-connector-mysql/
+          echo "Looking for any lib directories:"
+          find /tmp -name "lib" -type d
+          echo "Looking for JAR files in Debezium directory:"
+          find /tmp/debezium-connector-mysql -name "*.jar" -type f
+          echo "Copying Debezium connector libraries..."
+          # Copy all JAR files from the Debezium connector directory
+          find /tmp/debezium-connector-mysql -name "*.jar" -type f -exec cp {} /kafka/connect/lib/ \;
+          
+          # Copy any config files
+          if [ -d "/tmp/mongodb-kafka-connect-mongodb-2.0.1/config" ]; then
+            cp -r /tmp/mongodb-kafka-connect-mongodb-2.0.1/config/* /kafka/connect/config/
+          fi
+          find /tmp -name "config" -type d -exec sh -c 'if ls "$1"/*debezium* 1> /dev/null 2>&1; then echo "Found Debezium config in $1"; cp -r "$1"/* /kafka/connect/config/; fi' _ {} \;
+          
+          echo "Installed connectors:"
+          ls -la /kafka/connect/lib/
+        volumeMounts:
+        - name: kafka-connect-plugins
+          mountPath: /kafka/connect
+      containers:
+      - name: kafka-connect
+        image: debezium/connect:2.4
+        ports:
+        - containerPort: 8083
+        env:
+        - name: BOOTSTRAP_SERVERS
+          value: "localhost:9092"
+        - name: GROUP_ID
+          value: "connect-cluster"
+        - name: CONFIG_STORAGE_TOPIC
+          value: "connect-configs"
+        - name: OFFSET_STORAGE_TOPIC
+          value: "connect-offsets"
+        - name: STATUS_STORAGE_TOPIC
+          value: "connect-status"
+        - name: CONFIG_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: OFFSET_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: STATUS_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: CONNECT_REST_ADVERTISED_HOST_NAME
+          value: "localhost"
+        - name: CONNECT_PLUGIN_PATH
+          value: "/kafka/connect"
+        - name: CONNECT_REST_HOST_NAME
+          value: "0.0.0.0"
+        - name: CONNECT_REST_PORT
+          value: "8083"
+        - name: CONNECT_REST_ADVERTISED_PORT
+          value: "8083"
+        - name: CONNECT_KEY_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_INTERNAL_KEY_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_INTERNAL_VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_OFFSET_FLUSH_INTERVAL_MS
+          value: "60000"
+        - name: CONNECT_OFFSET_FLUSH_TIMEOUT_MS
+          value: "5000"
+        - name: CONNECT_SHUTDOWN_TIMEOUT
+          value: "10000"
+        volumeMounts:
+        - name: kafka-connect-plugins
+          mountPath: /kafka/connect
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "400m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8083
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: kafka-connect-plugins
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-connect-service
+spec:
+  selector:
+    app: kafka-connect
+  ports:
+  - name: connect
+    port: 8083
+    targetPort: 8083
+  type: ClusterIP

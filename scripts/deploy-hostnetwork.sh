@@ -50,9 +50,9 @@ REQUIRED_FILES=(
     "k8s/mysql/mysql-hostnetwork.yaml"
     "k8s/mysql/mysql-init-scripts.yaml"
     "k8s/kafka/kafka-hostnetwork.yaml"
-    "k8s/kafka/kafka-connect.yaml"
+    "k8s/kafka/kafka-connect-hostnetwork.yaml"
     "k8s/microservices/aggregation-service-deployment.yaml"
-    "k8s/connectors/debezium-mysql-connector.json"
+    "k8s/connectors/debezium-mysql-connector-hostnetwork.json"
     "k8s/connectors/mongodb-atlas-connector.json"
 )
 
@@ -104,9 +104,9 @@ fi
 print_status "Waiting for Kafka to be fully ready..."
 sleep 30
 
-# Deploy Kafka Connect
-print_status "Deploying Kafka Connect..."
-kubectl apply -f k8s/kafka/kafka-connect.yaml -n odl-demo
+# Deploy Kafka Connect with host networking
+print_status "Deploying Kafka Connect with host networking..."
+kubectl apply -f k8s/kafka/kafka-connect-hostnetwork.yaml -n odl-demo
 
 # Wait for Kafka Connect to be ready
 print_status "Waiting for Kafka Connect to be ready..."
@@ -162,9 +162,9 @@ fi
 
 print_status "Kafka Connect pod: $KAFKA_CONNECT_POD"
 
-# Deploy Debezium MySQL connector
-print_status "Deploying Debezium MySQL connector..."
-kubectl cp k8s/connectors/debezium-mysql-connector.json odl-demo/$KAFKA_CONNECT_POD:/tmp/debezium-mysql-connector.json
+# Deploy Debezium MySQL connector (host networking version)
+print_status "Deploying Debezium MySQL connector (host networking)..."
+kubectl cp k8s/connectors/debezium-mysql-connector-hostnetwork.json odl-demo/$KAFKA_CONNECT_POD:/tmp/debezium-mysql-connector.json
 kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: application/json" \
   --data @/tmp/debezium-mysql-connector.json \
   http://localhost:8083/connectors || print_warning "Failed to deploy Debezium connector (may already exist)"
@@ -193,15 +193,16 @@ if [ -n "$VM_IP" ]; then
     echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@$VM_IP:3306/banking"
     echo "[$(get_timestamp)] Kafka UI: http://$VM_IP:8080"
     echo "[$(get_timestamp)] Kafka: $VM_IP:9092"
+    echo "[$(get_timestamp)] Kafka Connect: http://$VM_IP:8083"
 else
     echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@localhost:3306/banking"
     echo "[$(get_timestamp)] Kafka UI: http://localhost:8080"
     echo "[$(get_timestamp)] Kafka: localhost:9092"
+    echo "[$(get_timestamp)] Kafka Connect: http://localhost:8083"
 fi
 
 echo ""
 print_status "Port Forwarding (for other services):"
-echo "[$(get_timestamp)] Kafka Connect: kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo"
 echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
 
 echo ""
