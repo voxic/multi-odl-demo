@@ -40,6 +40,26 @@ fi
 
 print_status "Kubernetes cluster is accessible"
 
+# Check if required files exist
+REQUIRED_FILES=(
+    "k8s/mysql/mysql-deployment.yaml"
+    "k8s/mysql/mysql-init-scripts.yaml"
+    "k8s/kafka/kafka-all-in-one.yaml"
+    "k8s/kafka/kafka-connect.yaml"
+    "k8s/microservices/aggregation-service-deployment.yaml"
+    "k8s/connectors/debezium-mysql-connector.json"
+    "k8s/connectors/mongodb-atlas-connector.json"
+)
+
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ ! -f "$file" ]; then
+        print_error "Required file not found: $file"
+        exit 1
+    fi
+done
+
+print_status "All required files found"
+
 # Create namespace
 print_status "Creating namespace 'odl-demo'..."
 kubectl create namespace odl-demo --dry-run=client -o yaml | kubectl apply -f -
@@ -51,7 +71,14 @@ kubectl apply -f k8s/mysql/mysql-init-scripts.yaml -n odl-demo
 
 # Wait for MySQL to be ready
 print_status "Waiting for MySQL to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/mysql -n odl-demo
+if ! kubectl wait --for=condition=available --timeout=300s deployment/mysql -n odl-demo; then
+    print_error "MySQL deployment failed to become available"
+    print_status "MySQL pod status:"
+    kubectl get pods -n odl-demo -l app=mysql
+    print_status "MySQL pod logs:"
+    kubectl logs -n odl-demo -l app=mysql --tail=50
+    exit 1
+fi
 
 # Deploy Kafka
 print_status "Deploying Kafka cluster..."
@@ -59,7 +86,14 @@ kubectl apply -f k8s/kafka/kafka-all-in-one.yaml -n odl-demo
 
 # Wait for Kafka to be ready
 print_status "Waiting for Kafka to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/kafka -n odl-demo
+if ! kubectl wait --for=condition=available --timeout=300s deployment/kafka -n odl-demo; then
+    print_error "Kafka deployment failed to become available"
+    print_status "Kafka pod status:"
+    kubectl get pods -n odl-demo -l app=kafka
+    print_status "Kafka pod logs:"
+    kubectl logs -n odl-demo -l app=kafka --tail=50
+    exit 1
+fi
 
 # Deploy Kafka Connect
 print_status "Deploying Kafka Connect..."
@@ -67,12 +101,21 @@ kubectl apply -f k8s/kafka/kafka-connect.yaml -n odl-demo
 
 # Wait for Kafka Connect to be ready
 print_status "Waiting for Kafka Connect to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/kafka-connect -n odl-demo
+if ! kubectl wait --for=condition=available --timeout=300s deployment/kafka-connect -n odl-demo; then
+    print_error "Kafka Connect deployment failed to become available"
+    print_status "Kafka Connect pod status:"
+    kubectl get pods -n odl-demo -l app=kafka-connect
+    print_status "Kafka Connect pod logs:"
+    kubectl logs -n odl-demo -l app=kafka-connect --tail=50
+    exit 1
+fi
 
 # Generate sample data
 print_status "Generating sample data..."
-kubectl run mysql-client --image=mysql:8.0 --rm -i --restart=Never -n odl-demo -- \
-  mysql -h mysql-service -u odl_user -podl_password banking < k8s/mysql/mysql-init-scripts.yaml
+if ! kubectl run mysql-client --image=mysql:8.0 --rm -i --restart=Never -n odl-demo -- \
+  mysql -h mysql-service -u odl_user -p odl_password banking -e "$(kubectl get configmap mysql-init-scripts -n odl-demo -o jsonpath='{.data.01-create-schema\.sql}')"; then
+    print_warning "Failed to generate sample data (this may be expected if data already exists)"
+fi
 
 # Deploy aggregation service
 print_status "Deploying aggregation service..."
@@ -80,7 +123,14 @@ kubectl apply -f k8s/microservices/aggregation-service-deployment.yaml -n odl-de
 
 # Wait for aggregation service to be ready
 print_status "Waiting for aggregation service to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/aggregation-service -n odl-demo
+if ! kubectl wait --for=condition=available --timeout=300s deployment/aggregation-service -n odl-demo; then
+    print_error "Aggregation service deployment failed to become available"
+    print_status "Aggregation service pod status:"
+    kubectl get pods -n odl-demo -l app=aggregation-service
+    print_status "Aggregation service pod logs:"
+    kubectl logs -n odl-demo -l app=aggregation-service --tail=50
+    exit 1
+fi
 
 # Setup Kafka connectors
 print_status "Setting up Kafka connectors..."
@@ -88,17 +138,28 @@ print_status "Setting up Kafka connectors..."
 # Wait for Kafka Connect to be fully ready
 sleep 30
 
+# Get Kafka Connect service details
+KAFKA_CONNECT_POD=$(kubectl get pods -n odl-demo -l app=kafka-connect -o jsonpath='{.items[0].metadata.name}')
+if [ -z "$KAFKA_CONNECT_POD" ]; then
+    print_error "Kafka Connect pod not found"
+    exit 1
+fi
+
+print_status "Kafka Connect pod: $KAFKA_CONNECT_POD"
+
 # Deploy Debezium MySQL connector
 print_status "Deploying Debezium MySQL connector..."
-curl -X POST -H "Content-Type: application/json" \
-  --data @k8s/connectors/debezium-mysql-connector.json \
-  http://$(kubectl get service kafka-connect-service -n odl-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}'):8083/connectors
+kubectl cp k8s/connectors/debezium-mysql-connector.json odl-demo/$KAFKA_CONNECT_POD:/tmp/debezium-mysql-connector.json
+kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: application/json" \
+  --data @/tmp/debezium-mysql-connector.json \
+  http://localhost:8083/connectors || print_warning "Failed to deploy Debezium connector (may already exist)"
 
 # Deploy MongoDB Atlas connector
 print_status "Deploying MongoDB Atlas connector..."
-curl -X POST -H "Content-Type: application/json" \
-  --data @k8s/connectors/mongodb-atlas-connector.json \
-  http://$(kubectl get service kafka-connect-service -n odl-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}'):8083/connectors
+kubectl cp k8s/connectors/mongodb-atlas-connector.json odl-demo/$KAFKA_CONNECT_POD:/tmp/mongodb-atlas-connector.json
+kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: application/json" \
+  --data @/tmp/mongodb-atlas-connector.json \
+  http://localhost:8083/connectors || print_warning "Failed to deploy MongoDB Atlas connector (may already exist)"
 
 print_status "🎉 Deployment completed successfully!"
 
