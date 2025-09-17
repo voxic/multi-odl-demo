@@ -2,11 +2,28 @@
 """
 Sample data generation script for ODL Demo banking application.
 Creates MySQL tables and populates them with realistic banking data.
+
+Usage:
+    # Option 1: With port-forward (recommended for local development)
+    kubectl port-forward service/mysql-service 3306:3306 -n odl-demo &
+    python3 scripts/generate-sample-data.py
+
+    # Option 2: Direct execution in MySQL pod
+    kubectl exec -it deployment/mysql -n odl-demo -- python3 -c "
+    import sys
+    sys.path.append('/tmp')
+    exec(open('/tmp/generate-sample-data.py').read())
+    "
+
+    # Option 3: Copy script to pod and run
+    kubectl cp scripts/generate-sample-data.py odl-demo/$(kubectl get pods -n odl-demo -l app=mysql -o jsonpath='{.items[0].metadata.name}'):/tmp/
+    kubectl exec -it deployment/mysql -n odl-demo -- python3 /tmp/generate-sample-data.py
 """
 
 import os
 import random
 import sys
+import subprocess
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import mysql.connector
@@ -115,18 +132,18 @@ CREATE TABLE IF NOT EXISTS agreements (
     FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
 );
 
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
-CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(customer_status);
-CREATE INDEX IF NOT EXISTS idx_accounts_customer_id ON accounts(customer_id);
-CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(account_type);
-CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(account_status);
-CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
-CREATE INDEX IF NOT EXISTS idx_agreements_customer_id ON agreements(customer_id);
-CREATE INDEX IF NOT EXISTS idx_agreements_account_id ON agreements(account_id);
-CREATE INDEX IF NOT EXISTS idx_agreements_type ON agreements(agreement_type);
+-- Create indexes for better performance (using individual statements for compatibility)
+CREATE INDEX idx_customers_email ON customers(email);
+CREATE INDEX idx_customers_status ON customers(customer_status);
+CREATE INDEX idx_accounts_customer_id ON accounts(customer_id);
+CREATE INDEX idx_accounts_type ON accounts(account_type);
+CREATE INDEX idx_accounts_status ON accounts(account_status);
+CREATE INDEX idx_transactions_account_id ON transactions(account_id);
+CREATE INDEX idx_transactions_type ON transactions(transaction_type);
+CREATE INDEX idx_transactions_date ON transactions(transaction_date);
+CREATE INDEX idx_agreements_customer_id ON agreements(customer_id);
+CREATE INDEX idx_agreements_account_id ON agreements(account_id);
+CREATE INDEX idx_agreements_type ON agreements(agreement_type);
 """
 
 
@@ -239,6 +256,56 @@ def generate_agreement(customer_id: int, account_id: int) -> Dict[str, Any]:
     }
 
 
+def check_kubernetes_environment() -> bool:
+    """Check if we're running in a Kubernetes environment."""
+    return os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount')
+
+
+def check_mysql_connection() -> bool:
+    """Check if MySQL is accessible."""
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        connection.close()
+        return True
+    except Error:
+        return False
+
+
+def print_connection_help():
+    """Print helpful connection instructions."""
+    print("\n" + "="*60)
+    print("MYSQL CONNECTION HELP")
+    print("="*60)
+    print("The script cannot connect to MySQL. Here are your options:\n")
+    
+    print("OPTION 1: Port Forward (Recommended)")
+    print("Run this in a separate terminal:")
+    print("  kubectl port-forward service/mysql-service 3306:3306 -n odl-demo")
+    print("Then run this script again.\n")
+    
+    print("OPTION 2: Run inside MySQL pod")
+    print("Copy the script to the pod and run it there:")
+    print("  kubectl cp scripts/generate-sample-data.py odl-demo/$(kubectl get pods -n odl-demo -l app=mysql -o jsonpath='{.items[0].metadata.name}'):/tmp/")
+    print("  kubectl exec -it deployment/mysql -n odl-demo -- python3 /tmp/generate-sample-data.py\n")
+    
+    print("OPTION 3: Use kubectl exec with inline script")
+    print("  kubectl exec -it deployment/mysql -n odl-demo -- python3 -c \"")
+    print("  import sys, os, random, mysql.connector")
+    print("  # ... (copy the script content here)")
+    print("  \"\n")
+    
+    print("OPTION 4: Set environment variables for different host")
+    print("  export MYSQL_HOST=mysql-service.odl-demo.svc.cluster.local")
+    print("  python3 scripts/generate-sample-data.py\n")
+    
+    print("Current connection config:")
+    print(f"  Host: {DB_CONFIG['host']}")
+    print(f"  Port: {DB_CONFIG['port']}")
+    print(f"  Database: {DB_CONFIG['database']}")
+    print(f"  User: {DB_CONFIG['user']}")
+    print("="*60)
+
+
 def create_tables(cursor) -> None:
     """Create database tables."""
     try:
@@ -250,7 +317,17 @@ def create_tables(cursor) -> None:
         
         for statement in statements:
             if statement:
-                cursor.execute(statement)
+                try:
+                    cursor.execute(statement)
+                except Error as e:
+                    # If it's an index creation error, it might already exist
+                    if "Duplicate key name" in str(e) or "already exists" in str(e):
+                        print(f"Index already exists, skipping: {statement[:50]}...")
+                        continue
+                    else:
+                        print(f"Error executing statement: {statement}")
+                        print(f"Error: {e}")
+                        raise
         
         print("Database tables created successfully!")
     except Error as e:
@@ -264,6 +341,13 @@ def generate_and_insert_data() -> None:
     
     try:
         print("Connecting to MySQL database...")
+        print(f"Connection details: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
+        
+        # Check if we can connect to MySQL
+        if not check_mysql_connection():
+            print_connection_help()
+            sys.exit(1)
+        
         connection = mysql.connector.connect(**DB_CONFIG)
         cursor = connection.cursor()
         

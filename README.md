@@ -254,16 +254,33 @@ curl http://localhost:3000/stats
 ```
 
 ### 2. Generate Sample Data
+
+#### Option 1: Port Forward (Recommended)
 ```bash
-# Connect to MySQL and generate data
+# In one terminal, set up port forwarding
+kubectl port-forward service/mysql-service 3306:3306 -n odl-demo
+
+# In another terminal, run the script
+python3 scripts/generate-sample-data.py
+```
+
+#### Option 2: Run inside MySQL pod
+```bash
+# Copy script to MySQL pod
+kubectl cp scripts/generate-sample-data.py odl-demo/$(kubectl get pods -n odl-demo -l app=mysql -o jsonpath='{.items[0].metadata.name}'):/tmp/
+
+# Run script inside the pod
+kubectl exec -it deployment/mysql -n odl-demo -- python3 /tmp/generate-sample-data.py
+```
+
+#### Option 3: Manual data insertion
+```bash
+# Connect to MySQL and generate data manually
 kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_password banking
 
 # In MySQL shell:
 INSERT INTO customers (first_name, last_name, email, customer_status) 
 VALUES ('Demo', 'User', 'demo@example.com', 'ACTIVE');
-
-# Or use the Python sample data script
-python3 scripts/generate-sample-data.py
 ```
 
 ### 3. Verify Data Flow

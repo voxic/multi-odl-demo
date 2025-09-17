@@ -44,9 +44,11 @@
 - [ ] Check MongoDB Atlas connector status: `curl http://localhost:8083/connectors/mongodb-atlas-connector/status`
 
 ### 3. Generate Sample Data
-- [ ] Connect to MySQL: `kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_password banking`
+- [ ] **Option 1 (Recommended)**: Set up port forwarding: `kubectl port-forward service/mysql-service 3306:3306 -n odl-demo`
 - [ ] Run Python sample data generation script: `python3 scripts/generate-sample-data.py`
-- [ ] Verify data in MySQL
+- [ ] **Option 2**: Copy script to pod: `kubectl cp scripts/generate-sample-data.py odl-demo/$(kubectl get pods -n odl-demo -l app=mysql -o jsonpath='{.items[0].metadata.name}'):/tmp/`
+- [ ] Run script in pod: `kubectl exec -it deployment/mysql -n odl-demo -- python3 /tmp/generate-sample-data.py`
+- [ ] Verify data in MySQL: `kubectl exec -it deployment/mysql -n odl-demo -- mysql -u odl_user -podl_password banking -e "SELECT COUNT(*) FROM customers;"`
 
 ### 4. Verify Data Flow
 - [ ] Check data appears in MongoDB Atlas Cluster 1 (customers collection)
