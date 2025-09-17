@@ -23,6 +23,7 @@ data:
     log.retention.check.interval.ms=300000
     group.initial.rebalance.delay.ms=0
     auto.create.topics.enable=true
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -90,6 +91,7 @@ spec:
       - name: kafka-config
         configMap:
           name: kafka-config
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -103,6 +105,7 @@ spec:
   - port: 9093
     targetPort: 9093
   type: ClusterIP
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
