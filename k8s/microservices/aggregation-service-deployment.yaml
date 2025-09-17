@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
       - name: aggregation-service
-        image: node:18-alpine
+        image: aggregation-service:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 3000
         env:
@@ -32,15 +33,6 @@ spec:
               key: cluster2-uri
         - name: PORT
           value: "3000"
-        workingDir: /app
-        command: ["sh", "-c"]
-        args:
-        - |
-          apk add --no-cache git
-          git clone https://github.com/your-repo/odl-demo.git /tmp/repo
-          cp -r /tmp/repo/microservices/aggregation-service/* /app/
-          npm install
-          npm start
         resources:
           requests:
             memory: "512Mi"

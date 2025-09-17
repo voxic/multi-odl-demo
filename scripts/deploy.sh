@@ -100,6 +100,10 @@ if ! kubectl wait --for=condition=available --timeout=300s deployment/kafka -n o
     exit 1
 fi
 
+# Wait additional time for Kafka to be fully ready
+print_status "Waiting for Kafka to be fully ready..."
+sleep 30
+
 # Deploy Kafka Connect
 print_status "Deploying Kafka Connect..."
 kubectl apply -f k8s/kafka/kafka-connect.yaml -n odl-demo
@@ -122,7 +126,12 @@ if ! kubectl run mysql-client --image=mysql:8.0 --rm -i --restart=Never -n odl-d
     print_warning "Failed to generate sample data (this may be expected if data already exists)"
 fi
 
-# Deploy aggregation service
+# Build and deploy aggregation service
+print_status "Building aggregation service Docker image..."
+cd microservices/aggregation-service
+docker build -t aggregation-service:latest .
+cd ../..
+
 print_status "Deploying aggregation service..."
 kubectl apply -f k8s/microservices/aggregation-service-deployment.yaml -n odl-demo
 
