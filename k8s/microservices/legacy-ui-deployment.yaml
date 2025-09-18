@@ -93,6 +93,8 @@ spec:
         - name: app-config
           mountPath: /app/config
           readOnly: true
+        - name: app-storage
+          mountPath: /tmp/app
       volumes:
       - name: source-code
         configMap:
@@ -100,6 +102,8 @@ spec:
       - name: app-config
         configMap:
           name: legacy-ui-config
+      - name: app-storage
+        emptyDir: {}
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
 ---

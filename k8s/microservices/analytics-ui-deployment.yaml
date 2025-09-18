@@ -80,6 +80,8 @@ spec:
         volumeMounts:
         - name: source-code
           mountPath: /workspace
+        - name: app-storage
+          mountPath: /tmp/app
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -92,6 +94,8 @@ spec:
       - name: source-code
         configMap:
           name: analytics-ui-source
+      - name: app-storage
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
