@@ -43,13 +43,23 @@ spec:
         command: ["sh", "-c"]
         args:
         - |
+          echo "Starting container setup..."
+          echo "Contents of /workspace:"
+          ls -la /workspace/
+          echo "Copying files..."
           cp /workspace/package.json /app/
           cp /workspace/server.js /app/
           mkdir -p /app/public
           cp /workspace/index.html /app/public/
           cp /workspace/script.js /app/public/
           cp /workspace/styles.css /app/public/
+          echo "Contents of /app after copy:"
+          ls -la /app/
+          echo "Contents of /app/public after copy:"
+          ls -la /app/public/
+          echo "Installing dependencies..."
           npm install
+          echo "Starting server..."
           npm start
         resources:
           requests:
