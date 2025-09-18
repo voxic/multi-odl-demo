@@ -268,13 +268,19 @@ async function aggregateCustomerData(customerId) {
     };
     
     // Upsert to Cluster 2
-    await db2.collection('customer_analytics').replaceOne(
+    logger.info(`Upserting analytics data for customer ${customerId}:`, JSON.stringify(analyticsDoc, null, 2));
+    const result = await db2.collection('customer_analytics').replaceOne(
       { customer_id: customerId },
       analyticsDoc,
       { upsert: true }
     );
     
-    logger.info(`Aggregated data for customer ${customerId}`);
+    logger.info(`Aggregated data for customer ${customerId}. Upsert result:`, {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      upsertedCount: result.upsertedCount,
+      upsertedId: result.upsertedId
+    });
     
   } catch (error) {
     logger.error(`Error aggregating data for customer ${customerId}:`, error);
@@ -350,21 +356,25 @@ async function setupChangeStreams() {
     const db1 = cluster1Client.db('banking');
     
     // Watch for changes in customers collection
-    const customersStream = db1.collection('customers').watch();
+    const customersStream = db1.collection('customers').watch([], { fullDocument: 'updateLookup' });
     customersStream.on('change', async (change) => {
       logger.info('Customer change detected:', change.operationType);
+      logger.info('Change document:', JSON.stringify(change, null, 2));
       if (change.operationType === 'insert' || change.operationType === 'update') {
         const customer = extractDataFromCDC(change.fullDocument);
+        logger.info('Extracted customer data:', JSON.stringify(customer, null, 2));
         if (customer && customer.customer_id) {
           const customerId = safeNumber(customer.customer_id);
           logger.info(`Triggering aggregation for customer ${customerId} due to customer change`);
           await aggregateCustomerData(customerId);
+        } else {
+          logger.warn('No valid customer data found in change event');
         }
       }
     });
     
     // Watch for changes in accounts collection
-    const accountsStream = db1.collection('accounts').watch();
+    const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
     accountsStream.on('change', async (change) => {
       logger.info('Account change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
@@ -378,7 +388,7 @@ async function setupChangeStreams() {
     });
     
     // Watch for changes in agreements collection
-    const agreementsStream = db1.collection('agreements').watch();
+    const agreementsStream = db1.collection('agreements').watch([], { fullDocument: 'updateLookup' });
     agreementsStream.on('change', async (change) => {
       logger.info('Agreement change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
@@ -392,7 +402,7 @@ async function setupChangeStreams() {
     });
     
     // Watch for changes in transactions collection
-    const transactionsStream = db1.collection('transactions').watch();
+    const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
     transactionsStream.on('change', async (change) => {
       logger.info('Transaction change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
