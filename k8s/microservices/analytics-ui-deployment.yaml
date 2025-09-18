@@ -29,25 +29,28 @@ spec:
           value: "3002"
         - name: AGGREGATION_SERVICE_URL
           value: "http://aggregation-service:3000"
-        workingDir: /app
+        workingDir: /tmp/app
         command: ["sh", "-c"]
         args:
         - |
           echo "Starting container setup..."
           echo "Contents of /workspace:"
           ls -la /workspace/
+          echo "Creating app directory..."
+          mkdir -p /tmp/app
           echo "Copying files..."
-          cp /workspace/package.json /app/
-          cp /workspace/server.js /app/
-          mkdir -p /app/public
-          cp /workspace/index.html /app/public/
-          cp /workspace/script.js /app/public/
-          cp /workspace/styles.css /app/public/
-          echo "Contents of /app after copy:"
-          ls -la /app/
-          echo "Contents of /app/public after copy:"
-          ls -la /app/public/
+          cp /workspace/package.json /tmp/app/
+          cp /workspace/server.js /tmp/app/
+          mkdir -p /tmp/app/public
+          cp /workspace/index.html /tmp/app/public/
+          cp /workspace/script.js /tmp/app/public/
+          cp /workspace/styles.css /tmp/app/public/
+          echo "Contents of /tmp/app after copy:"
+          ls -la /tmp/app/
+          echo "Contents of /tmp/app/public after copy:"
+          ls -la /tmp/app/public/
           echo "Installing dependencies..."
+          cd /tmp/app
           npm install
           echo "Starting server..."
           npm start
