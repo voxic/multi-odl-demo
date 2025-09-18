@@ -21,6 +21,7 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 ### Key Components
 
 - **Source System**: MySQL database with transactional data
+- **Legacy UI**: Web-based interface for editing MySQL data (retro 90s/2000s style)
 - **Change Data Capture**: Debezium for MySQL CDC
 - **Streaming Platform**: Apache Kafka for event streaming
 - **Primary ODL**: MongoDB Atlas Cluster 1 (full dataset)
@@ -241,7 +242,12 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 ```bash
 ./scripts/deploy-hostnetwork.sh
 ```
-**Benefits**: Direct access to standard ports (3306, 8080) with no port forwarding needed.
+**Benefits**: 
+- Single command deploys entire infrastructure including UIs
+- Direct access to standard ports (3306, 8080, 3001, 3002) with no port forwarding needed
+- UIs are built inside Kubernetes using ConfigMaps (no Docker image building required)
+- Legacy Banking UI: http://YOUR_VM_IP:3001
+- Analytics UI: http://YOUR_VM_IP:3002
 
 #### Option 2: Standard Kubernetes Networking
 ```bash
@@ -282,7 +288,7 @@ kubectl get services -n odl-demo
 
 #### Option 1: Host Networking (Recommended for Demos)
 ```bash
-# Deploy with host networking
+# Deploy with host networking (includes all UIs)
 ./scripts/deploy-hostnetwork.sh
 
 # After deployment, access services directly on standard ports:
@@ -290,8 +296,10 @@ kubectl get services -n odl-demo
 # Kafka UI: http://YOUR_VM_IP:8080
 # Kafka: YOUR_VM_IP:9092
 # Kafka Connect: http://YOUR_VM_IP:8083
+# Legacy Banking UI: http://YOUR_VM_IP:3001
+# Analytics UI: http://YOUR_VM_IP:3002
 
-# No additional configuration needed - services are immediately accessible!
+# No additional configuration needed - all services are immediately accessible!
 ```
 
 #### Option 2: Standard Kubernetes Networking
@@ -319,6 +327,64 @@ kubectl port-forward service/kafka-connect-service 8083:8083 -n odl-demo
 kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo
 ```
 
+## Legacy Banking UI - Data Management
+
+The Legacy Banking UI provides a retro-styled web interface for managing the core banking data in MySQL. This simulates the legacy system that feeds data into the ODL pipeline.
+
+### Features
+
+- **Customer Management**: View, search, and edit customer information
+- **Account Management**: Manage customer accounts, balances, and settings
+- **Transaction Management**: View transaction history and add new transactions
+- **Legacy Aesthetics**: Retro 90s/2000s interface design for demo purposes
+- **Real-time Updates**: Changes are immediately captured by the CDC pipeline
+
+### Accessing Legacy Banking UI
+
+#### Host Networking Access (Recommended for Demos)
+```bash
+# Access directly via VM IP on standard port
+http://YOUR_VM_IP:3001
+```
+
+#### Port Forwarding Access
+```bash
+# Set up port forwarding
+kubectl port-forward service/legacy-ui-service 3001:3001 -n odl-demo
+
+# Access via localhost
+http://localhost:3001
+```
+
+### Using the Legacy Banking UI
+
+#### 1. Customer Management
+- **View Customers**: Browse all customers in the system
+- **Search**: Use the search box to find specific customers
+- **Edit**: Click "Edit" to modify customer information
+- **View Accounts**: Click "Accounts" to see customer's accounts
+
+#### 2. Account Management
+- **Select Customer**: Choose a customer to view their accounts
+- **Edit Account**: Modify account details, balances, and settings
+- **View Transactions**: See transaction history for each account
+
+#### 3. Transaction Management
+- **Select Account**: Choose an account to view transactions
+- **Add Transaction**: Create new transactions (deposits, withdrawals, etc.)
+- **View History**: Browse recent transaction activity
+
+### Data Flow Integration
+
+The Legacy Banking UI is designed to demonstrate the ODL data flow:
+
+1. **Data Entry**: Users make changes through the legacy UI
+2. **MySQL Storage**: Changes are stored in the MySQL database
+3. **CDC Capture**: Debezium captures changes via MySQL binlog
+4. **Kafka Streaming**: Changes flow through Kafka topics
+5. **MongoDB Sync**: Data is synchronized to MongoDB Atlas
+6. **Analytics Processing**: Aggregation service processes the data
+
 ## Kafka UI - Monitoring and Management
 
 Kafka UI provides a web-based interface for monitoring and managing your Kafka cluster and connectors. It's essential for debugging data flow issues and monitoring system health.
@@ -327,8 +393,9 @@ Kafka UI provides a web-based interface for monitoring and managing your Kafka c
 
 #### Host Networking Access (Recommended for Demos)
 ```bash
-# Access directly via VM IP on standard port
-http://YOUR_VM_IP:8080
+# Access directly via VM IP on standard ports
+http://YOUR_VM_IP:8080  # Kafka UI
+http://YOUR_VM_IP:3001  # Legacy Banking UI
 ```
 
 #### NodePort Access
@@ -902,12 +969,21 @@ kubectl logs -f -l app=aggregation-service -n odl-demo
 │       ├── mysql-nodeport.yaml
 │       └── kafka-ui-nodeport.yaml
 ├── microservices/
-│   └── aggregation-service/
+│   ├── aggregation-service/
+│   │   ├── package.json
+│   │   └── index.js
+│   └── legacy-ui/
 │       ├── package.json
-│       └── index.js
+│       ├── server.js
+│       ├── Dockerfile
+│       └── public/
+│           ├── index.html
+│           ├── styles.css
+│           └── script.js
 ├── scripts/
 │   ├── deploy.sh
 │   ├── deploy-hostnetwork.sh
+│   ├── build-legacy-ui.sh
 │   ├── port-forward.sh
 │   ├── stop-port-forward.sh
 │   ├── cleanup.sh

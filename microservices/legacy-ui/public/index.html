@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banking System - Customer Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🏦 BANKING SYSTEM - CUSTOMER MANAGEMENT</h1>
+            <div class="header-info">
+                <span>System Version: 2.1.3</span>
+                <span>Last Updated: 2024-01-15</span>
+                <span id="current-time"></span>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="nav-bar">
+            <button class="nav-btn active" onclick="showSection('customers')">Customers</button>
+            <button class="nav-btn" onclick="showSection('accounts')">Accounts</button>
+            <button class="nav-btn" onclick="showSection('transactions')">Transactions</button>
+            <button class="nav-btn" onclick="refreshData()">Refresh</button>
+        </div>
+
+        <!-- Customers Section -->
+        <div id="customers-section" class="section active">
+            <div class="section-header">
+                <h2>Customer Database</h2>
+                <div class="search-box">
+                    <input type="text" id="customer-search" placeholder="Search customers..." onkeyup="searchCustomers()">
+                    <button onclick="searchCustomers()">Search</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Status</th>
+                            <th>City</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customers-table">
+                        <tr>
+                            <td colspan="7" class="loading">Loading customers...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Accounts Section -->
+        <div id="accounts-section" class="section">
+            <div class="section-header">
+                <h2>Account Management</h2>
+                <div class="customer-selector">
+                    <label>Customer:</label>
+                    <select id="customer-select" onchange="loadCustomerAccounts()">
+                        <option value="">Select a customer...</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Account #</th>
+                            <th>Type</th>
+                            <th>Balance</th>
+                            <th>Status</th>
+                            <th>Interest Rate</th>
+                            <th>Credit Limit</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accounts-table">
+                        <tr>
+                            <td colspan="7" class="loading">Select a customer to view accounts</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Transactions Section -->
+        <div id="transactions-section" class="section">
+            <div class="section-header">
+                <h2>Transaction History</h2>
+                <div class="account-selector">
+                    <label>Account:</label>
+                    <select id="account-select" onchange="loadAccountTransactions()">
+                        <option value="">Select an account...</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Reference</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-table">
+                        <tr>
+                            <td colspan="6" class="loading">Select an account to view transactions</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Customer Modal -->
+    <div id="edit-customer-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Customer</h3>
+                <span class="close" onclick="closeModal('edit-customer-modal')">&times;</span>
+            </div>
+            <form id="edit-customer-form">
+                <input type="hidden" id="edit-customer-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>First Name:</label>
+                        <input type="text" id="edit-first-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name:</label>
+                        <input type="text" id="edit-last-name" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email:</label>
+                        <input type="email" id="edit-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone:</label>
+                        <input type="text" id="edit-phone">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Address Line 1:</label>
+                        <input type="text" id="edit-address1">
+                    </div>
+                    <div class="form-group">
+                        <label>Address Line 2:</label>
+                        <input type="text" id="edit-address2">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>City:</label>
+                        <input type="text" id="edit-city">
+                    </div>
+                    <div class="form-group">
+                        <label>State:</label>
+                        <input type="text" id="edit-state" maxlength="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Postal Code:</label>
+                        <input type="text" id="edit-postal">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Country:</label>
+                        <input type="text" id="edit-country" value="USA">
+                    </div>
+                    <div class="form-group">
+                        <label>Status:</label>
+                        <select id="edit-status">
+                            <option value="ACTIVE">Active</option>
+                            <option value="INACTIVE">Inactive</option>
+                            <option value="SUSPENDED">Suspended</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('edit-customer-modal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Account Modal -->
+    <div id="edit-account-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Account</h3>
+                <span class="close" onclick="closeModal('edit-account-modal')">&times;</span>
+            </div>
+            <form id="edit-account-form">
+                <input type="hidden" id="edit-account-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Account Type:</label>
+                        <select id="edit-account-type">
+                            <option value="CHECKING">Checking</option>
+                            <option value="SAVINGS">Savings</option>
+                            <option value="CREDIT">Credit</option>
+                            <option value="LOAN">Loan</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Balance:</label>
+                        <input type="number" id="edit-balance" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Status:</label>
+                        <select id="edit-account-status">
+                            <option value="ACTIVE">Active</option>
+                            <option value="FROZEN">Frozen</option>
+                            <option value="CLOSED">Closed</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Interest Rate (%):</label>
+                        <input type="number" id="edit-interest-rate" step="0.0001" min="0" max="100">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Credit Limit:</label>
+                        <input type="number" id="edit-credit-limit" step="0.01" min="0">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('edit-account-modal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Transaction Modal -->
+    <div id="add-transaction-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Transaction</h3>
+                <span class="close" onclick="closeModal('add-transaction-modal')">&times;</span>
+            </div>
+            <form id="add-transaction-form">
+                <input type="hidden" id="add-transaction-account-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Transaction Type:</label>
+                        <select id="add-transaction-type" required>
+                            <option value="DEPOSIT">Deposit</option>
+                            <option value="WITHDRAWAL">Withdrawal</option>
+                            <option value="TRANSFER_IN">Transfer In</option>
+                            <option value="TRANSFER_OUT">Transfer Out</option>
+                            <option value="PAYMENT">Payment</option>
+                            <option value="FEE">Fee</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount:</label>
+                        <input type="number" id="add-transaction-amount" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Description:</label>
+                        <input type="text" id="add-transaction-description" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reference Number:</label>
+                        <input type="text" id="add-transaction-reference">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Add Transaction</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('add-transaction-modal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

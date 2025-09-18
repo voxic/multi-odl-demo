@@ -468,6 +468,68 @@ app.get('/stats', async (req, res) => {
   }
 });
 
+app.get('/customers', async (req, res) => {
+  try {
+    const db2 = cluster2Client.db('analytics');
+    const { page = 1, limit = 20, search = '' } = req.query;
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build search filter
+    let filter = {};
+    if (search) {
+      filter = {
+        $or: [
+          { 'profile.name': { $regex: search, $options: 'i' } },
+          { 'profile.email': { $regex: search, $options: 'i' } },
+          { 'profile.location': { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+    
+    const customers = await db2.collection('customer_analytics')
+      .find(filter)
+      .sort({ 'profile.name': 1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+    
+    const total = await db2.collection('customer_analytics').countDocuments(filter);
+    
+    res.json({
+      customers,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching customers:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/customers/:id', async (req, res) => {
+  try {
+    const db2 = cluster2Client.db('analytics');
+    const customerId = parseInt(req.params.id);
+    
+    const customer = await db2.collection('customer_analytics')
+      .findOne({ customer_id: customerId });
+    
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    
+    res.json(customer);
+  } catch (error) {
+    logger.error('Error fetching customer:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Initialize and start the service
 async function start() {
   try {

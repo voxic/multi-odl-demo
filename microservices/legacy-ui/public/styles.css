@@ -1,0 +1,469 @@
+/* Legacy Banking System Styles - Retro 90s/2000s Look */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Courier New', monospace;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: #333;
+    min-height: 100vh;
+    font-size: 14px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: #f0f0f0;
+    min-height: 100vh;
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+}
+
+/* Header */
+.header {
+    background: linear-gradient(90deg, #2c3e50 0%, #34495e 100%);
+    color: #ecf0f1;
+    padding: 15px 20px;
+    border-bottom: 3px solid #e74c3c;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.header h1 {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+
+.header-info {
+    display: flex;
+    gap: 20px;
+    font-size: 12px;
+    color: #bdc3c7;
+}
+
+#current-time {
+    margin-left: auto;
+    font-weight: bold;
+}
+
+/* Navigation */
+.nav-bar {
+    background: #34495e;
+    padding: 10px 20px;
+    border-bottom: 2px solid #2c3e50;
+    display: flex;
+    gap: 10px;
+}
+
+.nav-btn {
+    background: #3498db;
+    color: white;
+    border: 2px solid #2980b9;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    border-radius: 3px;
+}
+
+.nav-btn:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.nav-btn.active {
+    background: #e74c3c;
+    border-color: #c0392b;
+}
+
+/* Sections */
+.section {
+    display: none;
+    padding: 20px;
+    min-height: 600px;
+}
+
+.section.active {
+    display: block;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #bdc3c7;
+}
+
+.section-header h2 {
+    color: #2c3e50;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.search-box, .customer-selector, .account-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.search-box input, select {
+    padding: 6px 10px;
+    border: 2px solid #bdc3c7;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.search-box button, .btn-primary, .btn-secondary {
+    background: #27ae60;
+    color: white;
+    border: 2px solid #229954;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+}
+
+.search-box button:hover, .btn-primary:hover {
+    background: #229954;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #95a5a6;
+    border-color: #7f8c8d;
+}
+
+.btn-secondary:hover {
+    background: #7f8c8d;
+}
+
+/* Tables */
+.table-container {
+    background: white;
+    border: 2px solid #bdc3c7;
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.data-table th {
+    background: linear-gradient(90deg, #34495e 0%, #2c3e50 100%);
+    color: white;
+    padding: 12px 8px;
+    text-align: left;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-right: 1px solid #2c3e50;
+}
+
+.data-table th:last-child {
+    border-right: none;
+}
+
+.data-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #ecf0f1;
+    border-right: 1px solid #ecf0f1;
+    vertical-align: middle;
+}
+
+.data-table td:last-child {
+    border-right: none;
+}
+
+.data-table tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+.data-table tr:hover {
+    background: #e8f4f8;
+}
+
+.loading {
+    text-align: center;
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 20px;
+}
+
+/* Action Buttons */
+.action-btn {
+    background: #3498db;
+    color: white;
+    border: 1px solid #2980b9;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 2px;
+    margin: 0 2px;
+    transition: all 0.3s ease;
+}
+
+.action-btn:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+}
+
+.action-btn.edit {
+    background: #f39c12;
+    border-color: #e67e22;
+}
+
+.action-btn.edit:hover {
+    background: #e67e22;
+}
+
+.action-btn.add {
+    background: #27ae60;
+    border-color: #229954;
+}
+
+.action-btn.add:hover {
+    background: #229954;
+}
+
+/* Modals */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    background: white;
+    margin: 5% auto;
+    padding: 0;
+    border: 3px solid #2c3e50;
+    border-radius: 5px;
+    width: 80%;
+    max-width: 600px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    background: linear-gradient(90deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.close {
+    color: #ecf0f1;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close:hover {
+    color: #e74c3c;
+}
+
+/* Forms */
+form {
+    padding: 20px;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #2c3e50;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.form-group input, .form-group select {
+    padding: 8px 10px;
+    border: 2px solid #bdc3c7;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #ecf0f1;
+}
+
+/* Status Indicators */
+.status-active {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.status-inactive {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.status-suspended {
+    color: #f39c12;
+    font-weight: bold;
+}
+
+.status-frozen {
+    color: #3498db;
+    font-weight: bold;
+}
+
+.status-closed {
+    color: #95a5a6;
+    font-weight: bold;
+}
+
+/* Amount formatting */
+.amount-positive {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.amount-negative {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        margin: 0;
+        box-shadow: none;
+    }
+    
+    .header-info {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .nav-bar {
+        flex-wrap: wrap;
+    }
+    
+    .section-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    
+    .form-row {
+        flex-direction: column;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 10% auto;
+    }
+    
+    .data-table {
+        font-size: 10px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        padding: 6px 4px;
+    }
+}
+
+/* Legacy System Aesthetics */
+.container::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #34495e;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #2c3e50;
+}

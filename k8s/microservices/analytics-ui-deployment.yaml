@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-ui
+  namespace: odl-demo
+  labels:
+    app: analytics-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-ui
+  template:
+    metadata:
+      labels:
+        app: analytics-ui
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: analytics-ui
+        image: node:18-alpine
+        ports:
+        - containerPort: 3002
+          hostPort: 3002
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "3002"
+        - name: AGGREGATION_SERVICE_URL
+          value: "http://aggregation-service:3000"
+        workingDir: /app
+        command: ["sh", "-c"]
+        args:
+        - |
+          cp /workspace/package.json /app/
+          cp /workspace/server.js /app/
+          cp -r /workspace/public /app/
+          npm install
+          npm start
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: source-code
+          mountPath: /workspace
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: source-code
+        configMap:
+          name: analytics-ui-source
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-ui-service
+  namespace: odl-demo
+  labels:
+    app: analytics-ui
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3002
+    targetPort: 3002
+    protocol: TCP
+    name: http
+  selector:
+    app: analytics-ui

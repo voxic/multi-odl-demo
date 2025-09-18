@@ -30,8 +30,13 @@
 
 ## Deployment Steps
 
-### 1. Deploy Infrastructure
-- [ ] Run deployment script: `./scripts/deploy.sh`
+### 1. Deploy Infrastructure (Single Command)
+- [ ] **For Host Networking (Recommended)**: Run `./scripts/deploy-hostnetwork.sh`
+  - [ ] This deploys all infrastructure including UIs in one command
+  - [ ] UIs are built inside Kubernetes using ConfigMaps
+  - [ ] No Docker image building required
+  - [ ] Direct access to all services on standard ports
+- [ ] **For Standard Deployment**: Run `./scripts/deploy.sh`
 - [ ] Wait for all pods to be ready: `kubectl get pods -n odl-demo`
 - [ ] Verify all services are running: `kubectl get services -n odl-demo`
 
@@ -65,6 +70,8 @@
 - [ ] All pods are running: `kubectl get pods -n odl-demo`
 - [ ] Aggregation service health: `curl http://localhost:3000/health`
 - [ ] System statistics: `curl http://localhost:3000/stats`
+- [ ] Legacy UI accessible: `curl http://YOUR_VM_IP:3001/health`
+- [ ] Analytics UI accessible: `curl http://YOUR_VM_IP:3002/api/health`
 
 ### 2. Data Flow Testing
 - [ ] Insert new customer in MySQL
@@ -82,6 +89,15 @@
 ### 1. Demo Script Testing
 - [ ] Run demo script: `./scripts/demo.sh`
 - [ ] Verify all demo steps work correctly
+- [ ] Test Legacy UI functionality:
+  - [ ] Access http://YOUR_VM_IP:3001
+  - [ ] Test customer management features
+  - [ ] Test account management features
+  - [ ] Test transaction viewing and adding
+- [ ] Test Analytics UI functionality:
+  - [ ] Access http://YOUR_VM_IP:3002
+  - [ ] Verify data visualization
+  - [ ] Test real-time updates
 - [ ] Prepare demo data scenarios
 - [ ] Test presentation flow
 
@@ -142,12 +158,52 @@
   kubectl rollout restart deployment/aggregation-service -n odl-demo
   ```
 
+#### UI Service Issues
+- [ ] **Error**: Legacy UI not accessible or not working
+- [ ] **Solution**: Check and restart the service:
+  ```bash
+  kubectl get pods -n odl-demo -l app=legacy-ui
+  kubectl logs -n odl-demo deployment/legacy-ui --tail=50
+  kubectl rollout restart deployment/legacy-ui -n odl-demo
+  ```
+- [ ] **Error**: Analytics UI not accessible or not working
+- [ ] **Solution**: Check and restart the service:
+  ```bash
+  kubectl get pods -n odl-demo -l app=analytics-ui
+  kubectl logs -n odl-demo deployment/analytics-ui --tail=50
+  kubectl rollout restart deployment/analytics-ui -n odl-demo
+  ```
+- [ ] **Error**: UI ConfigMaps missing or outdated
+- [ ] **Solution**: Recreate ConfigMaps and restart deployments:
+  ```bash
+  # For Legacy UI
+  kubectl create configmap legacy-ui-source \
+    --from-file=package.json=microservices/legacy-ui/package.json \
+    --from-file=server.js=microservices/legacy-ui/server.js \
+    --from-file=public/index.html=microservices/legacy-ui/public/index.html \
+    --from-file=public/script.js=microservices/legacy-ui/public/script.js \
+    --from-file=public/styles.css=microservices/legacy-ui/public/styles.css \
+    -n odl-demo --dry-run=client -o yaml | kubectl apply -f -
+  
+  # For Analytics UI
+  kubectl create configmap analytics-ui-source \
+    --from-file=package.json=microservices/analytics-ui/package.json \
+    --from-file=server.js=microservices/analytics-ui/server.js \
+    --from-file=public/index.html=microservices/analytics-ui/public/index.html \
+    --from-file=public/script.js=microservices/analytics-ui/public/script.js \
+    --from-file=public/styles.css=microservices/analytics-ui/public/styles.css \
+    -n odl-demo --dry-run=client -o yaml | kubectl apply -f -
+  ```
+
 ### Debug Commands
 - [ ] Check all pods: `kubectl get pods -n odl-demo`
 - [ ] Check connector status: `curl http://localhost:8083/connectors`
 - [ ] View MySQL logs: `kubectl logs -n odl-demo deployment/mysql --tail=50`
 - [ ] View Kafka Connect logs: `kubectl logs -n odl-demo deployment/kafka-connect --tail=50`
 - [ ] View aggregation service logs: `kubectl logs -n odl-demo deployment/aggregation-service --tail=50`
+- [ ] View Legacy UI logs: `kubectl logs -n odl-demo deployment/legacy-ui --tail=50`
+- [ ] View Analytics UI logs: `kubectl logs -n odl-demo deployment/analytics-ui --tail=50`
+- [ ] Check UI ConfigMaps: `kubectl get configmaps -n odl-demo | grep ui`
 - [ ] Data not flowing to MongoDB - verify connector status and topic routing
 
 ### Recovery Steps
@@ -185,6 +241,9 @@
 - [ ] Data flows from MySQL to Atlas Cluster 1
 - [ ] Aggregated data appears in Atlas Cluster 2
 - [ ] Real-time updates work correctly
+- [ ] Legacy UI is accessible and functional at http://YOUR_VM_IP:3001
+- [ ] Analytics UI is accessible and functional at http://YOUR_VM_IP:3002
+- [ ] UIs can interact with the data pipeline
 - [ ] Demo script runs successfully
 - [ ] System is stable for presentation duration
 

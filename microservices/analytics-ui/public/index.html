@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Analytics Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <i class="fas fa-chart-line"></i>
+                        <h1>Customer Analytics</h1>
+                    </div>
+                    <div class="header-stats" id="headerStats">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Customers</span>
+                            <span class="stat-value" id="totalCustomers">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Analytics Records</span>
+                            <span class="stat-value" id="analyticsRecords">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Status</span>
+                            <span class="stat-value status" id="systemStatus">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <div class="container">
+                <!-- Search and Filters -->
+                <div class="controls">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" placeholder="Search customers by name, email, or location...">
+                    </div>
+                    <div class="filters">
+                        <select id="statusFilter">
+                            <option value="">All Status</option>
+                            <option value="ACTIVE">Active</option>
+                            <option value="INACTIVE">Inactive</option>
+                            <option value="SUSPENDED">Suspended</option>
+                        </select>
+                        <select id="riskFilter">
+                            <option value="">All Risk Levels</option>
+                            <option value="LOW">Low Risk</option>
+                            <option value="MEDIUM">Medium Risk</option>
+                            <option value="HIGH">High Risk</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Loading customers...</p>
+                </div>
+
+                <!-- Error State -->
+                <div class="error" id="error" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p id="errorMessage">Failed to load customers</p>
+                    <button onclick="loadCustomers()" class="retry-btn">Retry</button>
+                </div>
+
+                <!-- Customer Grid -->
+                <div class="customer-grid" id="customerGrid">
+                    <!-- Customer cards will be inserted here -->
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination" id="pagination" style="display: none;">
+                    <button id="prevBtn" onclick="changePage(-1)" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                        Previous
+                    </button>
+                    <span id="pageInfo">Page 1 of 1</span>
+                    <button id="nextBtn" onclick="changePage(1)" disabled>
+                        Next
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Customer Detail Modal -->
+        <div class="modal" id="customerModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Customer Details</h2>
+                    <button class="close-btn" onclick="closeModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Customer details will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
