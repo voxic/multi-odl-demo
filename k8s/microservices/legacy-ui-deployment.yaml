@@ -39,6 +39,8 @@ spec:
           value: "banking"
         - name: PORT
           value: "3001"
+        - name: NPM_CONFIG_CACHE
+          value: "/tmp/app/.npm"
         workingDir: /tmp/app
         command: ["sh", "-c"]
         args:
