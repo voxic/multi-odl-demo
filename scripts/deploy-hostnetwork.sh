@@ -186,7 +186,9 @@ if [ -f "microservices/legacy-ui/package.json" ]; then
     kubectl create configmap legacy-ui-source \
       --from-file=package.json=microservices/legacy-ui/package.json \
       --from-file=server.js=microservices/legacy-ui/server.js \
-      --from-file=microservices/legacy-ui/public \
+      --from-file=index.html=microservices/legacy-ui/public/index.html \
+      --from-file=script.js=microservices/legacy-ui/public/script.js \
+      --from-file=styles.css=microservices/legacy-ui/public/styles.css \
       -n odl-demo \
       --dry-run=client -o yaml | kubectl apply -f -
     
@@ -215,7 +217,9 @@ if [ -f "microservices/analytics-ui/package.json" ]; then
     kubectl create configmap analytics-ui-source \
       --from-file=package.json=microservices/analytics-ui/package.json \
       --from-file=server.js=microservices/analytics-ui/server.js \
-      --from-file=microservices/analytics-ui/public \
+      --from-file=index.html=microservices/analytics-ui/public/index.html \
+      --from-file=script.js=microservices/analytics-ui/public/script.js \
+      --from-file=styles.css=microservices/analytics-ui/public/styles.css \
       -n odl-demo \
       --dry-run=client -o yaml | kubectl apply -f -
     

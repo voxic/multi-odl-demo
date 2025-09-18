@@ -35,7 +35,10 @@ spec:
         - |
           cp /workspace/package.json /app/
           cp /workspace/server.js /app/
-          cp -r /workspace/public /app/
+          mkdir -p /app/public
+          cp /workspace/index.html /app/public/
+          cp /workspace/script.js /app/public/
+          cp /workspace/styles.css /app/public/
           npm install
           npm start
         resources:
