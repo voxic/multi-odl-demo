@@ -75,6 +75,7 @@ REQUIRED_FILES=(
     "k8s/microservices/customer-profile-service-deployment-docker.yaml"
     "k8s/microservices/legacy-ui-deployment-docker.yaml"
     "k8s/microservices/analytics-ui-deployment-docker.yaml"
+    "k8s/microservices/bankui-landing-deployment-docker.yaml"
     "k8s/connectors/debezium-mysql-connector-hostnetwork.json"
     "k8s/connectors/mongodb-atlas-connector.json"
 )
@@ -219,6 +220,21 @@ if ! kubectl wait --for=condition=available --timeout=300s deployment/analytics-
     exit 1
 fi
 
+# Deploy BankUI Landing
+print_status "Deploying BankUI Landing..."
+kubectl apply -f k8s/microservices/bankui-landing-deployment-docker.yaml -n odl-demo
+
+# Wait for BankUI Landing to be ready
+print_status "Waiting for BankUI Landing to be ready..."
+if ! kubectl wait --for=condition=available --timeout=300s deployment/bankui-landing -n odl-demo; then
+    print_error "BankUI Landing deployment failed to become available"
+    print_status "BankUI Landing pod status:"
+    kubectl get pods -n odl-demo -l app=bankui-landing
+    print_status "BankUI Landing pod logs:"
+    kubectl logs -n odl-demo -l app=bankui-landing --tail=50
+    exit 1
+fi
+
 # Setup Kafka connectors
 print_status "Setting up Kafka connectors..."
 
@@ -305,15 +321,17 @@ if [ -n "$VM_IP" ]; then
     echo "[$(get_timestamp)] Kafka UI: http://$VM_IP:8080"
     echo "[$(get_timestamp)] Kafka: $VM_IP:9092"
     echo "[$(get_timestamp)] Kafka Connect: http://$VM_IP:8083"
-    echo "[$(get_timestamp)] Legacy Banking UI: http://$VM_IP:3003"
+    echo "[$(get_timestamp)] Legacy UI: http://$VM_IP:3003"
     echo "[$(get_timestamp)] Analytics UI: http://$VM_IP:3002"
+    echo "[$(get_timestamp)] BankUI Landing: http://$VM_IP:3004"
 else
     echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@localhost:3306/banking"
     echo "[$(get_timestamp)] Kafka UI: http://localhost:8080"
     echo "[$(get_timestamp)] Kafka: localhost:9092"
     echo "[$(get_timestamp)] Kafka Connect: http://localhost:8083"
-    echo "[$(get_timestamp)] Legacy Banking UI: http://localhost:3003"
+    echo "[$(get_timestamp)] Legacy UI: http://localhost:3003"
     echo "[$(get_timestamp)] Analytics UI: http://localhost:3002"
+    echo "[$(get_timestamp)] BankUI Landing: http://localhost:3004"
 fi
 
 echo ""
