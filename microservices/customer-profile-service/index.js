@@ -193,7 +193,20 @@ async function buildCustomerProfile(customerId) {
         '_id': -1     // Secondary sort by _id for consistency
       }
     }).toArray();
-    const accounts = accountsCDC.map(extractDataFromCDC).filter(Boolean);
+    
+    // Extract account data and deduplicate by account_id, keeping only the latest version
+    const accountsMap = new Map();
+    accountsCDC.forEach(cdc => {
+      const account = extractDataFromCDC(cdc);
+      if (account && account.account_id) {
+        const accountId = safeBase64Number(account.account_id);
+        // Only keep the latest version of each account (since we sorted by ts_ms desc)
+        if (!accountsMap.has(accountId)) {
+          accountsMap.set(accountId, account);
+        }
+      }
+    });
+    const accounts = Array.from(accountsMap.values());
 
     // Fetch 10 most recent transactions per account
     const accountOverviews = [];
@@ -216,13 +229,25 @@ async function buildCustomerProfile(customerId) {
         })
         .limit(10)
         .toArray();
-      const transactions = txCDC.map(extractDataFromCDC).filter(Boolean).map(t => ({
-        transaction_id: safeBase64Number(t.transaction_id),
-        transaction_date: safeDate(t.transaction_date),
-        amount: safeBase64Number(t.amount),
-        type: safeString(t.transaction_type),
-        description: safeString(t.description)
-      }));
+      // Extract transaction data and deduplicate by transaction_id, keeping only the latest version
+      const transactionsMap = new Map();
+      txCDC.forEach(cdc => {
+        const transaction = extractDataFromCDC(cdc);
+        if (transaction && transaction.transaction_id) {
+          const transactionId = safeBase64Number(transaction.transaction_id);
+          // Only keep the latest version of each transaction (since we sorted by ts_ms desc)
+          if (!transactionsMap.has(transactionId)) {
+            transactionsMap.set(transactionId, {
+              transaction_id: transactionId,
+              transaction_date: safeDate(transaction.transaction_date),
+              amount: safeBase64Number(transaction.amount),
+              type: safeString(transaction.transaction_type),
+              description: safeString(transaction.description)
+            });
+          }
+        }
+      });
+      const transactions = Array.from(transactionsMap.values());
 
       accountOverviews.push({
         account_id: safeBase64Number(account.account_id),
