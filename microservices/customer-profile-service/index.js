@@ -87,17 +87,30 @@ async function buildCustomerProfile(customerId) {
     const db2 = cluster2Client.db('analytics');
 
     const customerCDC = await db1.collection('customers').findOne({
-      'after.customer_id': Long.fromString(customerId.toString())
+      $or: [
+        { 'after.customer_id': Long.fromString(customerId.toString()) },
+        { 'after.customer_id': customerId },
+        { 'after.customer_id': { $numberLong: customerId.toString() } }
+      ]
     });
     if (!customerCDC) {
       logger.warn(`Customer ${customerId} not found`);
       return;
     }
     const customer = extractDataFromCDC(customerCDC);
-    if (!customer) return;
+    if (!customer) {
+      logger.warn(`Customer ${customerId} data is invalid after extraction`);
+      return;
+    }
+    
+    logger.info(`Building profile for customer ${customerId}: ${safeString(customer.first_name)} ${safeString(customer.last_name)}`);
 
     const accountsCDC = await db1.collection('accounts').find({
-      'after.customer_id': Long.fromString(customerId.toString())
+      $or: [
+        { 'after.customer_id': Long.fromString(customerId.toString()) },
+        { 'after.customer_id': customerId },
+        { 'after.customer_id': { $numberLong: customerId.toString() } }
+      ]
     }).toArray();
     const accounts = accountsCDC.map(extractDataFromCDC).filter(Boolean);
 
@@ -106,7 +119,13 @@ async function buildCustomerProfile(customerId) {
     for (const account of accounts) {
       const accountId = safeNumber(account.account_id);
       const txCDC = await db1.collection('transactions')
-        .find({ 'after.account_id': Long.fromString(accountId.toString()) })
+        .find({ 
+          $or: [
+            { 'after.account_id': Long.fromString(accountId.toString()) },
+            { 'after.account_id': accountId },
+            { 'after.account_id': { $numberLong: accountId.toString() } }
+          ]
+        })
         .sort({ 'after.transaction_date': -1 })
         .limit(10)
         .toArray();
@@ -170,6 +189,8 @@ async function processAllCustomers() {
       const c = extractDataFromCDC(cdc);
       return c ? safeNumber(c.customer_id) : null;
     }).filter(Boolean))];
+    
+    logger.info(`Found ${customerIds.length} unique customers to process`);
 
     for (const customerId of customerIds) {
       await buildCustomerProfile(customerId);

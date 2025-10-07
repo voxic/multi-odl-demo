@@ -185,7 +185,11 @@ async function aggregateCustomerData(customerId) {
     
     // Get customer data from CDC events
     const customerCDC = await db1.collection('customers').findOne({ 
-      'after.customer_id': Long.fromString(customerId.toString()) 
+      $or: [
+        { 'after.customer_id': Long.fromString(customerId.toString()) },
+        { 'after.customer_id': customerId },
+        { 'after.customer_id': { $numberLong: customerId.toString() } }
+      ]
     });
     
     if (!customerCDC) {
@@ -195,7 +199,7 @@ async function aggregateCustomerData(customerId) {
     
     const customer = extractDataFromCDC(customerCDC);
     if (!customer) {
-      logger.warn(`Customer ${customerId} data is invalid`);
+      logger.warn(`Customer ${customerId} data is invalid after extraction`);
       return;
     }
     
@@ -203,14 +207,22 @@ async function aggregateCustomerData(customerId) {
     
     // Get customer accounts from CDC events
     const accountsCDC = await db1.collection('accounts').find({ 
-      'after.customer_id': Long.fromString(customerId.toString()) 
+      $or: [
+        { 'after.customer_id': Long.fromString(customerId.toString()) },
+        { 'after.customer_id': customerId },
+        { 'after.customer_id': { $numberLong: customerId.toString() } }
+      ]
     }).toArray();
     
     const accounts = accountsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
     
     // Get customer agreements from CDC events
     const agreementsCDC = await db1.collection('agreements').find({ 
-      'after.customer_id': Long.fromString(customerId.toString()) 
+      $or: [
+        { 'after.customer_id': Long.fromString(customerId.toString()) },
+        { 'after.customer_id': customerId },
+        { 'after.customer_id': { $numberLong: customerId.toString() } }
+      ]
     }).toArray();
     
     const agreements = agreementsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
@@ -219,9 +231,13 @@ async function aggregateCustomerData(customerId) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const accountIds = accounts.map(acc => Long.fromString(acc.account_id.toString()));
+    const accountIds = accounts.map(acc => acc.account_id);
     const transactionsCDC = await db1.collection('transactions').find({
-      'after.account_id': { $in: accountIds },
+      $or: [
+        { 'after.account_id': { $in: accountIds } },
+        { 'after.account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } },
+        { 'after.account_id': { $in: accountIds.map(id => ({ $numberLong: id.toString() })) } }
+      ],
       'after.transaction_date': { 
         $gte: Long.fromNumber(thirtyDaysAgo.getTime())
       }
