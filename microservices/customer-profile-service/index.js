@@ -356,6 +356,43 @@ app.get('/customers/:id', async (req, res) => {
   }
 });
 
+// API endpoints with /api prefix for bankui-landing compatibility
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'healthy', processing: isProcessing, timestamp: new Date().toISOString() });
+});
+
+app.get('/api/customers/random', async (req, res) => {
+  try {
+    const db2 = cluster2Client.db('analytics');
+    
+    // Get a random customer profile from the analytics database
+    const randomProfile = await db2.collection('customer_profile').aggregate([
+      { $sample: { size: 1 } }
+    ]).toArray();
+    
+    if (randomProfile.length === 0) {
+      return res.status(404).json({ error: 'No customer profiles found' });
+    }
+    
+    res.json(randomProfile[0]);
+  } catch (error) {
+    logger.error('Error fetching random customer:', error);
+    res.status(500).json({ error: 'Failed to fetch random customer' });
+  }
+});
+
+app.get('/api/customers/:id', async (req, res) => {
+  try {
+    const db2 = cluster2Client.db('analytics');
+    const customerId = parseInt(req.params.id);
+    const doc = await db2.collection('customer_profile').findOne({ customer_id: customerId });
+    if (!doc) return res.status(404).json({ error: 'Profile not found' });
+    res.json(doc);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 async function start() {
   try {
     await initializeConnections();
