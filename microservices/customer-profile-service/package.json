@@ -1,0 +1,23 @@
+{
+  "name": "customer-profile-service",
+  "version": "1.0.0",
+  "description": "Customer profile aggregation service for landing page",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "mongodb": "^6.3.0",
+    "express": "^4.18.2",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": ["mongodb", "atlas", "profile", "aggregation", "odl"],
+  "author": "ODL Demo Team",
+  "license": "MIT"
+}
+
