@@ -42,12 +42,12 @@ DB_CONFIG = {
 # Sample data configuration
 _env_use_faker = os.getenv('ODL_USE_FAKER')
 CONFIG = {
-    'customers': int(os.getenv('ODL_CUSTOMERS', 100)),
+    'customers': int(os.getenv('ODL_CUSTOMERS', 1000)),
     'accounts_per_customer': {
         'min': int(os.getenv('ODL_ACCOUNTS_PER_CUSTOMER_MIN', 1)),
         'max': int(os.getenv('ODL_ACCOUNTS_PER_CUSTOMER_MAX', 3))
     },
-    'transactions_per_account': int(os.getenv('ODL_TX_PER_ACCOUNT', 10)),
+    'transactions_per_account': int(os.getenv('ODL_TX_PER_ACCOUNT', 100)),
     'agreements_percentage': int(os.getenv('ODL_AGREEMENTS_PERCENT', 30)),
     'data_timeline': int(os.getenv('ODL_TIMELINE_DAYS', 30)),  # days
     'batch_size': int(os.getenv('ODL_BATCH_SIZE', 1000)),
