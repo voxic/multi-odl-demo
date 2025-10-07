@@ -24,8 +24,9 @@ import os
 import random
 import sys
 import subprocess
+import argparse
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterable, Tuple
 import mysql.connector
 from mysql.connector import Error
 
@@ -39,19 +40,48 @@ DB_CONFIG = {
 }
 
 # Sample data configuration
+_env_use_faker = os.getenv('ODL_USE_FAKER')
 CONFIG = {
-    'customers': 100,
-    'accounts_per_customer': {'min': 1, 'max': 3},
-    'transactions_per_account': 10,
-    'agreements_percentage': 30,
-    'data_timeline': 30  # days
+    'customers': int(os.getenv('ODL_CUSTOMERS', 100)),
+    'accounts_per_customer': {
+        'min': int(os.getenv('ODL_ACCOUNTS_PER_CUSTOMER_MIN', 1)),
+        'max': int(os.getenv('ODL_ACCOUNTS_PER_CUSTOMER_MAX', 3))
+    },
+    'transactions_per_account': int(os.getenv('ODL_TX_PER_ACCOUNT', 10)),
+    'agreements_percentage': int(os.getenv('ODL_AGREEMENTS_PERCENT', 30)),
+    'data_timeline': int(os.getenv('ODL_TIMELINE_DAYS', 30)),  # days
+    'batch_size': int(os.getenv('ODL_BATCH_SIZE', 1000)),
+    'random_seed': os.getenv('ODL_RANDOM_SEED'),
+    # Default to True when env var is not provided; otherwise respect truthy/falsey value
+    'use_faker': (True if _env_use_faker is None else _env_use_faker in ('1', 'true', 'True'))
 }
 
 # Sample data generators
-FIRST_NAMES = ['John', 'Jane', 'Michael', 'Sarah', 'David', 'Emily', 'Robert', 'Jessica', 'William', 'Ashley']
-LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']
-CITIES = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'San Jose']
-STATES = ['NY', 'CA', 'IL', 'TX', 'AZ', 'PA', 'TX', 'CA', 'TX', 'CA']
+FIRST_NAMES = [
+    'Liam', 'Noah', 'Oliver', 'Elijah', 'James', 'William', 'Benjamin', 'Lucas', 'Henry', 'Theodore',
+    'Olivia', 'Emma', 'Charlotte', 'Amelia', 'Sophia', 'Isabella', 'Mia', 'Evelyn', 'Harper', 'Luna',
+    'Ava', 'Mason', 'Logan', 'Jacob', 'Michael', 'Daniel', 'Matthew', 'Sebastian', 'Jack', 'Aiden',
+    'Emily', 'Abigail', 'Ella', 'Elizabeth', 'Sofia', 'Avery', 'Scarlett', 'Madison', 'Camila', 'Aria'
+]
+LAST_NAMES = [
+    'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez',
+    'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin',
+    'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson',
+    'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores'
+]
+CITIES = [
+    'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego',
+    'Dallas', 'San Jose', 'Austin', 'Jacksonville', 'Fort Worth', 'Columbus', 'Charlotte', 'San Francisco',
+    'Indianapolis', 'Seattle', 'Denver', 'Washington'
+]
+STATES = [
+    'NY', 'CA', 'IL', 'TX', 'AZ', 'PA', 'FL', 'OH', 'NC', 'WA', 'CO', 'DC'
+]
+
+TRANSACTION_DESCRIPTIONS = [
+    'ATM withdrawal', 'Salary deposit', 'Online transfer', 'Bill payment', 'POS purchase', 'Wire transfer',
+    'Subscription fee', 'Service charge', 'Card payment', 'Refund', 'Cash deposit', 'Mobile payment'
+]
 
 # Table creation SQL
 CREATE_TABLES_SQL = """
@@ -164,26 +194,60 @@ def random_date(days_ago: int) -> datetime:
     return now - timedelta(days=random_days)
 
 
+def chunked(items: Iterable[Any], chunk_size: int) -> Iterable[List[Any]]:
+    """Yield lists of size chunk_size from items."""
+    chunk: List[Any] = []
+    for item in items:
+        chunk.append(item)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
 def generate_customer(customer_id: int) -> Dict[str, Any]:
     """Generate a random customer record with unique email."""
-    first_name = random_choice(FIRST_NAMES)
-    last_name = random_choice(LAST_NAMES)
-    # Ensure unique email by including customer_id
-    email = f"{first_name.lower()}.{last_name.lower()}{customer_id}@email.com"
+    global FAKE
+    if FAKE is not None:
+        first_name = FAKE.first_name()
+        last_name = FAKE.last_name()
+        # Ensure unique email by including customer_id to avoid collisions
+        email = f"{FAKE.user_name()}.{customer_id}@{FAKE.free_email_domain()}"
+        addr = FAKE.address().split('\n')
+        address_line1 = addr[0][:100]
+        address_line2 = addr[1][:100] if len(addr) > 1 else None
+        city = FAKE.city()
+        state = FAKE.state_abbr()
+        postal_code = FAKE.postcode()[:10]
+        phone = FAKE.phone_number()
+        dob = FAKE.date_of_birth(minimum_age=18, maximum_age=85)
+    else:
+        first_name = random_choice(FIRST_NAMES)
+        last_name = random_choice(LAST_NAMES)
+        # Ensure unique email by including customer_id
+        email = f"{first_name.lower()}.{last_name.lower()}{customer_id}@email.com"
+        address_line1 = f"{random_between(1, 9999)} {random_choice(['Main', 'Oak', 'Pine', 'Cedar', 'Elm'])} St"
+        address_line2 = f"Apt {random_between(1, 20)}{random_choice(['A', 'B', 'C'])}" if random.random() > 0.7 else None
+        city = random_choice(CITIES)
+        state = random_choice(STATES)
+        postal_code = str(random_between(10000, 99999))
+        phone = f"+1-{random_choice(['212','305','312','415','512','617','646','702','808','818','925'])}-{random_between(100, 999):03d}-{random_between(1000, 9999)}"
+        dob = random_date(365 * 50)
     
     return {
         'first_name': first_name,
         'last_name': last_name,
         'email': email,
-        'phone': f"+1-555-{random_between(100, 999):03d}-{random_between(1000, 9999)}",
-        'date_of_birth': random_date(365 * 50),  # Random date within last 50 years
-        'address_line1': f"{random_between(1, 9999)} {random_choice(['Main', 'Oak', 'Pine', 'Cedar', 'Elm'])} St",
-        'address_line2': f"Apt {random_between(1, 20)}{random_choice(['A', 'B', 'C'])}" if random.random() > 0.7 else None,
-        'city': random_choice(CITIES),
-        'state': random_choice(STATES),
-        'postal_code': str(random_between(10000, 99999)),
+        'phone': phone,
+        'date_of_birth': dob,  # date object or datetime accepted by connector
+        'address_line1': address_line1,
+        'address_line2': address_line2,
+        'city': city,
+        'state': state,
+        'postal_code': postal_code,
         'country': 'USA',
-        'customer_status': random_choice(['ACTIVE', 'ACTIVE', 'ACTIVE', 'INACTIVE']),  # 75% active
+        'customer_status': random.choices(['ACTIVE', 'INACTIVE', 'SUSPENDED'], weights=[80, 15, 5])[0],
         'created_at': random_date(CONFIG['data_timeline']),
         'updated_at': random_date(CONFIG['data_timeline'])
     }
@@ -191,16 +255,17 @@ def generate_customer(customer_id: int) -> Dict[str, Any]:
 
 def generate_account(customer_id: int, account_counter: int) -> Dict[str, Any]:
     """Generate a random account record for the given customer."""
-    account_types = ['CHECKING', 'SAVINGS', 'CREDIT', 'LOAN']
-    account_type = random_choice(account_types)
+    account_type = random.choices(
+        ['CHECKING', 'SAVINGS', 'CREDIT', 'LOAN'], weights=[55, 25, 15, 5]
+    )[0]
     
     return {
         'customer_id': customer_id,
         'account_number': f"ACC-2024-{customer_id:06d}-{account_counter:02d}",
         'account_type': account_type,
-        'balance': random_between(100, 50000),
+        'balance': random_between(100, 50000) if account_type != 'LOAN' else -random_between(1000, 20000),
         'currency': 'USD',
-        'account_status': random_choice(['ACTIVE', 'ACTIVE', 'ACTIVE', 'FROZEN']),  # 75% active
+        'account_status': random.choices(['ACTIVE', 'FROZEN', 'CLOSED'], weights=[80, 15, 5])[0],
         'interest_rate': random_between(1, 3) / 100 if account_type == 'SAVINGS' else 0,
         'credit_limit': random_between(1000, 10000) if account_type == 'CREDIT' else None,
         'opened_date': random_date(CONFIG['data_timeline']),
@@ -212,21 +277,23 @@ def generate_account(customer_id: int, account_counter: int) -> Dict[str, Any]:
 
 def generate_transaction(account_id: int) -> Dict[str, Any]:
     """Generate a random transaction record for the given account."""
-    transaction_types = ['DEPOSIT', 'WITHDRAWAL', 'TRANSFER_IN', 'TRANSFER_OUT', 'PAYMENT', 'FEE']
-    transaction_type = random_choice(transaction_types)
-    amount = random_between(10, 2000)
+    transaction_type = random.choices(
+        ['DEPOSIT', 'WITHDRAWAL', 'TRANSFER_IN', 'TRANSFER_OUT', 'PAYMENT', 'FEE'],
+        weights=[25, 25, 15, 15, 15, 5]
+    )[0]
+    amount = random_between(5, 5000)
     
     return {
         'account_id': account_id,
         'transaction_type': transaction_type,
         'amount': -amount if transaction_type in ['WITHDRAWAL', 'TRANSFER_OUT'] else amount,
         'currency': 'USD',
-        'description': f"{transaction_type.lower()} transaction",
+        'description': random_choice(TRANSACTION_DESCRIPTIONS),
         'reference_number': f"TXN-{random_between(100000, 999999)}",
         'counterparty_account': f"ACC-{random_between(100000, 999999)}" if random.random() > 0.5 else None,
         'transaction_date': random_date(CONFIG['data_timeline']),
         'posted_date': random_date(CONFIG['data_timeline']),
-        'status': random_choice(['COMPLETED', 'COMPLETED', 'COMPLETED', 'PENDING']),  # 75% completed
+        'status': random.choices(['COMPLETED', 'PENDING', 'FAILED', 'CANCELLED'], weights=[75, 15, 8, 2])[0],
         'created_at': random_date(CONFIG['data_timeline']),
         'updated_at': random_date(CONFIG['data_timeline'])
     }
@@ -234,9 +301,8 @@ def generate_transaction(account_id: int) -> Dict[str, Any]:
 
 def generate_agreement(customer_id: int, account_id: int, agreement_counter: int) -> Dict[str, Any]:
     """Generate a random agreement record for the given customer and account."""
-    agreement_types = ['LOAN', 'CREDIT_CARD', 'OVERDRAFT', 'INVESTMENT']
-    agreement_type = random_choice(agreement_types)
-    principal_amount = random_between(5000, 100000)
+    agreement_type = random.choices(['LOAN', 'CREDIT_CARD', 'OVERDRAFT', 'INVESTMENT'], weights=[60, 25, 10, 5])[0]
+    principal_amount = random_between(2000, 200000)
     
     return {
         'customer_id': customer_id,
@@ -245,13 +311,13 @@ def generate_agreement(customer_id: int, account_id: int, agreement_counter: int
         'agreement_number': f"AGR-{customer_id:06d}-{agreement_counter:03d}",
         'principal_amount': principal_amount,
         'current_balance': random_between(0, principal_amount),
-        'interest_rate': random_between(3, 15) / 100,
+        'interest_rate': random_between(3, 25) / 100,
         'term_months': random_between(12, 60),
         'payment_amount': principal_amount // random_between(12, 60),
         'payment_frequency': random_choice(['MONTHLY', 'QUARTERLY', 'ANNUALLY']),
         'start_date': random_date(CONFIG['data_timeline']),
         'end_date': None,
-        'status': random_choice(['ACTIVE', 'ACTIVE', 'ACTIVE', 'COMPLETED']),  # 75% active
+        'status': random.choices(['ACTIVE', 'COMPLETED', 'DEFAULTED', 'CANCELLED'], weights=[75, 15, 5, 5])[0],
         'created_at': random_date(CONFIG['data_timeline']),
         'updated_at': random_date(CONFIG['data_timeline'])
     }
@@ -357,44 +423,55 @@ def generate_and_insert_data() -> None:
         
         print("Generating sample data...")
         
-        # Generate customers
-        customers = []
-        for i in range(1, CONFIG['customers'] + 1):
-            customers.append(generate_customer(i))
-        
-        # Insert customers
-        print(f"Inserting {len(customers)} customers...")
-        customer_insert_query = """
-        INSERT INTO customers (first_name, last_name, email, phone, date_of_birth, 
-                              address_line1, address_line2, city, state, postal_code, country, 
-                              customer_status, created_at, updated_at) 
-        VALUES (%(first_name)s, %(last_name)s, %(email)s, %(phone)s,
-                %(date_of_birth)s, %(address_line1)s, %(address_line2)s,
-                %(city)s, %(state)s, %(postal_code)s, %(country)s,
-                %(customer_status)s, %(created_at)s, %(updated_at)s)
-        """
-        
-        inserted_customer_ids = set()
-        for customer in customers:
+        # Optional seeding
+        if CONFIG['random_seed'] is not None:
             try:
-                cursor.execute(customer_insert_query, customer)
-                # Get the inserted customer ID
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                customer_id = cursor.fetchone()[0]
-                inserted_customer_ids.add(customer_id)
-            except Error as e:
-                if "Duplicate entry" in str(e):
-                    print(f"Skipping duplicate customer: {customer['email']}")
-                    # Try to find existing customer ID
-                    cursor.execute("SELECT customer_id FROM customers WHERE email = %s", (customer['email'],))
-                    result = cursor.fetchone()
-                    if result:
-                        inserted_customer_ids.add(result[0])
-                    continue
-                else:
-                    raise
-        
-        print(f"Successfully processed {len(inserted_customer_ids)} customers")
+                random.seed(int(CONFIG['random_seed']))
+            except ValueError:
+                random.seed(CONFIG['random_seed'])
+        # Optional Faker setup
+        global FAKE
+        FAKE = None
+        if CONFIG.get('use_faker'):
+            try:
+                from faker import Faker  # type: ignore
+                FAKE = Faker('en_US')
+                if CONFIG['random_seed'] is not None:
+                    try:
+                        FAKE.seed_instance(int(CONFIG['random_seed']))
+                    except ValueError:
+                        FAKE.seed_instance(CONFIG['random_seed'])
+                print("Faker enabled for customer data generation")
+            except Exception as e:
+                print(f"Faker requested but not available ({e}); continuing without it.")
+
+        # Generate customers
+        customers = [generate_customer(i) for i in range(1, CONFIG['customers'] + 1)]
+
+        # Insert customers in batches
+        print(f"Inserting {len(customers)} customers (batch size {CONFIG['batch_size']})...")
+        customer_insert_query = (
+            "INSERT IGNORE INTO customers (first_name, last_name, email, phone, date_of_birth, "
+            "address_line1, address_line2, city, state, postal_code, country, "
+            "customer_status, created_at, updated_at) "
+            "VALUES (%(first_name)s, %(last_name)s, %(email)s, %(phone)s, %(date_of_birth)s, %(address_line1)s, %(address_line2)s, %(city)s, %(state)s, %(postal_code)s, %(country)s, %(customer_status)s, %(created_at)s, %(updated_at)s)"
+        )
+
+        for batch in chunked(customers, CONFIG['batch_size']):
+            cursor.executemany(customer_insert_query, batch)
+
+        # Map emails to customer IDs
+        emails = [c['email'] for c in customers]
+        inserted_customer_ids: set[int] = set()
+        email_to_id: Dict[str, int] = {}
+        for batch in chunked(emails, CONFIG['batch_size']):
+            placeholders = ",".join(["%s"] * len(batch))
+            cursor.execute(f"SELECT customer_id, email FROM customers WHERE email IN ({placeholders})", batch)
+            for cid, email in cursor.fetchall():
+                inserted_customer_ids.add(cid)
+                email_to_id[email] = cid
+
+        print(f"Customers available: {len(inserted_customer_ids)}")
         
         # Generate accounts only for customers that exist
         accounts = []
@@ -411,33 +488,33 @@ def generate_and_insert_data() -> None:
         processed_customers = 0
         
         # First, we need to insert accounts to get their IDs
-        print(f"Inserting {len(accounts)} accounts...")
-        account_insert_query = """
-        INSERT INTO accounts (customer_id, account_number, account_type, balance, 
-                             currency, account_status, interest_rate, credit_limit, opened_date, 
-                             closed_date, created_at, updated_at) 
-        VALUES (%(customer_id)s, %(account_number)s, %(account_type)s, %(balance)s,
-                %(currency)s, %(account_status)s, %(interest_rate)s, %(credit_limit)s,
-                %(opened_date)s, %(closed_date)s, %(created_at)s, %(updated_at)s)
-        """
-        
+        print(f"Inserting {len(accounts)} accounts (batch size {CONFIG['batch_size']})...")
+        account_insert_query = (
+            "INSERT IGNORE INTO accounts (customer_id, account_number, account_type, balance, "
+            "currency, account_status, interest_rate, credit_limit, opened_date, closed_date, created_at, updated_at) "
+            "VALUES (%(customer_id)s, %(account_number)s, %(account_type)s, %(balance)s, %(currency)s, %(account_status)s, %(interest_rate)s, %(credit_limit)s, %(opened_date)s, %(closed_date)s, %(created_at)s, %(updated_at)s)"
+        )
+
+        for batch in chunked(accounts, CONFIG['batch_size']):
+            cursor.executemany(account_insert_query, batch)
+
+        # Map account_number to account_id
+        account_numbers = [a['account_number'] for a in accounts]
+        accnum_to_id: Dict[str, int] = {}
+        for batch in chunked(account_numbers, CONFIG['batch_size']):
+            placeholders = ",".join(["%s"] * len(batch))
+            cursor.execute(f"SELECT account_id, account_number FROM accounts WHERE account_number IN ({placeholders})", batch)
+            for aid, accnum in cursor.fetchall():
+                accnum_to_id[accnum] = aid
+
         inserted_accounts = []
-        for account in accounts:
-            try:
-                cursor.execute(account_insert_query, account)
-                # Get the inserted account ID
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                account_id = cursor.fetchone()[0]
-                account['account_id'] = account_id  # Add the ID to the account dict
-                inserted_accounts.append(account)
-            except Error as e:
-                if "Duplicate entry" in str(e):
-                    print(f"Skipping duplicate account: {account['account_number']}")
-                    continue
-                else:
-                    raise
-        
-        print(f"Successfully processed {len(inserted_accounts)} accounts")
+        for a in accounts:
+            aid = accnum_to_id.get(a['account_number'])
+            if aid:
+                a['account_id'] = aid
+                inserted_accounts.append(a)
+
+        print(f"Accounts available: {len(inserted_accounts)}")
         
         # Generate transactions using inserted accounts
         transactions = []
@@ -446,7 +523,7 @@ def generate_and_insert_data() -> None:
                 transactions.append(generate_transaction(account['account_id']))
         
         # Insert transactions
-        print(f"Inserting {len(transactions)} transactions...")
+        print(f"Inserting {len(transactions)} transactions (batch size {CONFIG['batch_size']})...")
         transaction_insert_query = """
         INSERT INTO transactions (account_id, transaction_type, amount, currency, 
                                 description, reference_number, counterparty_account, transaction_date, 
@@ -457,8 +534,8 @@ def generate_and_insert_data() -> None:
                 %(status)s, %(created_at)s, %(updated_at)s)
         """
         
-        for transaction in transactions:
-            cursor.execute(transaction_insert_query, transaction)
+        for batch in chunked(transactions, CONFIG['batch_size']):
+            cursor.executemany(transaction_insert_query, batch)
         
         # Now generate agreements using the inserted accounts
         for customer_id in inserted_customer_ids:
@@ -472,7 +549,7 @@ def generate_and_insert_data() -> None:
                 processed_customers += 1
         
         # Insert agreements
-        print(f"Inserting {len(agreements)} agreements...")
+        print(f"Inserting {len(agreements)} agreements (batch size {CONFIG['batch_size']})...")
         agreement_insert_query = """
         INSERT INTO agreements (customer_id, account_id, agreement_type, agreement_number, 
                                principal_amount, current_balance, interest_rate, term_months, payment_amount, 
@@ -484,13 +561,12 @@ def generate_and_insert_data() -> None:
                 %(status)s, %(created_at)s, %(updated_at)s)
         """
         
-        for agreement in agreements:
+        for batch in chunked(agreements, CONFIG['batch_size']):
             try:
-                cursor.execute(agreement_insert_query, agreement)
+                cursor.executemany(agreement_insert_query, batch)
             except Error as e:
                 if "Duplicate entry" in str(e):
-                    print(f"Skipping duplicate agreement: {agreement['agreement_number']}")
-                    continue
+                    pass
                 else:
                     raise
         
@@ -516,4 +592,46 @@ def generate_and_insert_data() -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate ODL Demo sample data")
+    parser.add_argument("--customers", type=int, help="Number of customers to generate")
+    parser.add_argument("--accounts-min", type=int, help="Min accounts per customer")
+    parser.add_argument("--accounts-max", type=int, help="Max accounts per customer")
+    parser.add_argument("--tx-per-account", type=int, help="Transactions per account")
+    parser.add_argument("--agreements-percent", type=int, help="Percent of customers with agreements")
+    parser.add_argument("--timeline-days", type=int, help="Timeline window in days")
+    parser.add_argument("--batch-size", type=int, help="Insert batch size")
+    parser.add_argument("--seed", type=str, help="Random seed for reproducibility")
+    parser.add_argument("--use-faker", action="store_true", help="Use Faker for customer data")
+    parser.add_argument("--no-faker", action="store_true", help="Disable Faker and use built-in generator")
+    args = parser.parse_args()
+
+    if args.customers is not None:
+        CONFIG['customers'] = args.customers
+    if args.accounts_min is not None:
+        CONFIG['accounts_per_customer']['min'] = args.accounts_min
+    if args.accounts_max is not None:
+        CONFIG['accounts_per_customer']['max'] = args.accounts_max
+    if args.tx_per_account is not None:
+        CONFIG['transactions_per_account'] = args.tx_per_account
+    if args.agreements_percent is not None:
+        CONFIG['agreements_percentage'] = args.agreements_percent
+    if args.timeline_days is not None:
+        CONFIG['data_timeline'] = args.timeline_days
+    if args.batch_size is not None:
+        CONFIG['batch_size'] = args.batch_size
+    if args.seed is not None:
+        CONFIG['random_seed'] = args.seed
+    if args.use_faker:
+        CONFIG['use_faker'] = True
+    if args.no_faker:
+        CONFIG['use_faker'] = False
+
+    # Basic validation
+    CONFIG['accounts_per_customer']['min'] = max(0, CONFIG['accounts_per_customer']['min'])
+    CONFIG['accounts_per_customer']['max'] = max(CONFIG['accounts_per_customer']['min'], CONFIG['accounts_per_customer']['max'])
+    CONFIG['agreements_percentage'] = min(max(CONFIG['agreements_percentage'], 0), 100)
+    CONFIG['batch_size'] = max(100, CONFIG['batch_size'])
+
+    print(f"Config: customers={CONFIG['customers']}, accounts=[{CONFIG['accounts_per_customer']['min']}-{CONFIG['accounts_per_customer']['max']}], tx/account={CONFIG['transactions_per_account']}, agreements%={CONFIG['agreements_percentage']}, days={CONFIG['data_timeline']}, batch={CONFIG['batch_size']}, faker={CONFIG['use_faker']}")
+
     generate_and_insert_data()
