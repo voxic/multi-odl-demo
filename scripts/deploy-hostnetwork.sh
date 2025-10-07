@@ -209,10 +209,48 @@ kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: ap
 
 # Deploy MongoDB Atlas connector
 print_status "Deploying MongoDB Atlas connector..."
-kubectl cp k8s/connectors/mongodb-atlas-connector.json odl-demo/$KAFKA_CONNECT_POD:/tmp/mongodb-atlas-connector.json
+
+# Load MongoDB configuration to get the actual connection string
+while IFS='=' read -r key value; do
+    if [[ $key =~ ^[[:space:]]*# ]] || [[ -z $key ]]; then
+        continue
+    fi
+    key=$(echo "$key" | xargs)
+    value=$(echo "$value" | xargs)
+    export "$key"="$value"
+done < "$LOCAL_CONFIG_FILE"
+
+# Create a temporary connector configuration with the actual connection string
+TEMP_CONNECTOR_FILE="/tmp/mongodb-atlas-connector-temp.json"
+cat > "$TEMP_CONNECTOR_FILE" << EOF
+{
+  "name": "mongodb-atlas-connector",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "tasks.max": "1",
+    "topics": "mysql.inventory.customers,mysql.inventory.accounts,mysql.inventory.transactions,mysql.inventory.agreements",
+    "connection.uri": "$MONGO_CLUSTER1_URI",
+    "database": "banking",
+    "collection": "customers",
+    "topic.override.mysql.inventory.customers.collection": "customers",
+    "topic.override.mysql.inventory.accounts.collection": "accounts", 
+    "topic.override.mysql.inventory.transactions.collection": "transactions",
+    "topic.override.mysql.inventory.agreements.collection": "agreements",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false"
+  }
+}
+EOF
+
+kubectl cp "$TEMP_CONNECTOR_FILE" odl-demo/$KAFKA_CONNECT_POD:/tmp/mongodb-atlas-connector.json
 kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: application/json" \
   --data @/tmp/mongodb-atlas-connector.json \
   http://localhost:8083/connectors || print_warning "Failed to deploy MongoDB Atlas connector (may already exist)"
+
+# Clean up temporary file
+rm -f "$TEMP_CONNECTOR_FILE"
 
 # Deploy Legacy Banking UI
 print_status "Deploying Legacy Banking UI..."
