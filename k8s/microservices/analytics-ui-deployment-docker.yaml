@@ -14,15 +14,21 @@ spec:
       labels:
         app: analytics-ui
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: analytics-ui
         image: analytics-ui:latest
         imagePullPolicy: Never  # Use local image
         ports:
         - containerPort: 3002
+          hostPort: 3002
+          protocol: TCP
         env:
         - name: PORT
           value: "3002"
+        - name: AGGREGATION_SERVICE_URL
+          value: "http://localhost:3000"
         resources:
           requests:
             memory: "256Mi"

@@ -14,15 +14,29 @@ spec:
       labels:
         app: legacy-ui
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: legacy-ui
         image: legacy-ui:latest
         imagePullPolicy: Never  # Use local image
         ports:
         - containerPort: 3003
+          hostPort: 3003
+          protocol: TCP
         env:
         - name: PORT
           value: "3003"
+        - name: MYSQL_HOST
+          value: "localhost"
+        - name: MYSQL_PORT
+          value: "3306"
+        - name: MYSQL_USER
+          value: "odl_user"
+        - name: MYSQL_PASSWORD
+          value: "odl_password"
+        - name: MYSQL_DATABASE
+          value: "banking"
         resources:
           requests:
             memory: "256Mi"
