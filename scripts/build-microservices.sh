@@ -83,10 +83,28 @@ cd "$PROJECT_ROOT"
 # Load images into MicroK8s (if using MicroK8s)
 if command -v microk8s &> /dev/null; then
     print_status "Loading images into MicroK8s..."
-    microk8s ctr images import <(docker save aggregation-service:latest)
-    microk8s ctr images import <(docker save customer-profile-service:latest)
-    microk8s ctr images import <(docker save analytics-ui:latest)
-    microk8s ctr images import <(docker save legacy-ui:latest)
+    
+    # Create temporary directory for image files
+    TEMP_DIR=$(mktemp -d)
+    trap "rm -rf $TEMP_DIR" EXIT
+    
+    # Save images to temporary files and import them
+    print_status "Saving aggregation service image..."
+    docker save aggregation-service:latest > "$TEMP_DIR/aggregation-service.tar"
+    microk8s ctr images import "$TEMP_DIR/aggregation-service.tar"
+    
+    print_status "Saving customer profile service image..."
+    docker save customer-profile-service:latest > "$TEMP_DIR/customer-profile-service.tar"
+    microk8s ctr images import "$TEMP_DIR/customer-profile-service.tar"
+    
+    print_status "Saving analytics UI image..."
+    docker save analytics-ui:latest > "$TEMP_DIR/analytics-ui.tar"
+    microk8s ctr images import "$TEMP_DIR/analytics-ui.tar"
+    
+    print_status "Saving legacy UI image..."
+    docker save legacy-ui:latest > "$TEMP_DIR/legacy-ui.tar"
+    microk8s ctr images import "$TEMP_DIR/legacy-ui.tar"
+    
     print_success "Images loaded into MicroK8s"
 else
     print_warning "MicroK8s not detected. Make sure your Kubernetes cluster can access the Docker images."
