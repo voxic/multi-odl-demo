@@ -19,6 +19,13 @@
                         <h1>BankUI</h1>
                     </div>
                     <div class="header-actions">
+                        <div class="search-container">
+                            <input type="text" id="customerIdInput" placeholder="Enter Customer ID" class="search-input">
+                            <button class="search-btn" onclick="searchCustomerById()">
+                                <i class="fas fa-search"></i>
+                                Search
+                            </button>
+                        </div>
                         <button class="refresh-btn" onclick="loadRandomCustomer()">
                             <i class="fas fa-sync-alt"></i>
                             New Customer

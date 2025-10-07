@@ -16,6 +16,13 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSystemStatus();
     loadRandomCustomer();
     
+    // Add event listener for Enter key in search input
+    const customerIdInput = document.getElementById('customerIdInput');
+    customerIdInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            searchCustomerById();
+        }
+    });
 });
 
 // Load system status
@@ -77,6 +84,47 @@ async function loadRandomCustomer() {
         
     } catch (err) {
         console.error('Failed to load random customer:', err);
+        showError(err.message);
+        hideLoading();
+    } finally {
+        isLoading = false;
+    }
+}
+
+// Search customer by ID
+async function searchCustomerById() {
+    const customerIdInput = document.getElementById('customerIdInput');
+    const customerId = customerIdInput.value.trim();
+    
+    if (!customerId) {
+        showError('Please enter a customer ID');
+        return;
+    }
+    
+    if (isLoading) return;
+    
+    isLoading = true;
+    showLoading();
+    hideError();
+    hideCustomerProfile();
+    
+    try {
+        const response = await fetch(`/api/customers/${customerId}`);
+        const customer = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(customer.error || 'Customer not found');
+        }
+        
+        currentCustomer = customer;
+        displayCustomerProfile(customer);
+        hideLoading();
+        
+        // Clear the input after successful search
+        customerIdInput.value = '';
+        
+    } catch (err) {
+        console.error('Failed to load customer by ID:', err);
         showError(err.message);
         hideLoading();
     } finally {
