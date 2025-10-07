@@ -35,39 +35,21 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/customers/random', async (req, res) => {
   try {
-    // Try multiple random customer IDs to find a valid one
-    const maxAttempts = 10;
-    let attempts = 0;
-    
-    while (attempts < maxAttempts) {
-      // Generate random customer ID between 1 and 1000
-      const randomCustomerId = Math.floor(Math.random() * 1000) + 1;
-      
-      try {
-        const response = await axios.get(`${CUSTOMER_PROFILE_SERVICE_URL}/customers/${randomCustomerId}`);
-        res.json(response.data);
-        return;
-      } catch (error) {
-        if (error.response?.status === 404) {
-          attempts++;
-          continue;
-        } else {
-          throw error;
-        }
-      }
-    }
-    
-    // If no customer found after max attempts
-    res.status(404).json({ error: 'No customer profiles found' });
+    const response = await axios.get(`${CUSTOMER_PROFILE_SERVICE_URL}/api/customers/random`);
+    res.json(response.data);
   } catch (error) {
     console.error('Error fetching random customer:', error);
-    res.status(500).json({ error: 'Failed to fetch random customer' });
+    if (error.response?.status === 404) {
+      res.status(404).json({ error: 'No customer profiles found' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch random customer' });
+    }
   }
 });
 
 app.get('/api/customers/:id', async (req, res) => {
   try {
-    const response = await axios.get(`${CUSTOMER_PROFILE_SERVICE_URL}/customers/${req.params.id}`);
+    const response = await axios.get(`${CUSTOMER_PROFILE_SERVICE_URL}/api/customers/${req.params.id}`);
     res.json(response.data);
   } catch (error) {
     if (error.response?.status === 404) {
