@@ -18,6 +18,16 @@
 - [ ] Verify kubectl is working: `kubectl cluster-info`
 - [ ] Check available resources: `kubectl top nodes`
 - [ ] Ensure VM has internet access for pulling images
+- [ ] **Install Docker** (required for microservices deployment):
+  ```bash
+  sudo apt update
+  sudo apt install -y docker.io
+  sudo systemctl start docker
+  sudo systemctl enable docker
+  sudo usermod -aG docker $USER
+  newgrp docker
+  docker --version
+  ```
 
 ### 3. MongoDB Atlas Configuration
 - [ ] **NEW APPROACH**: Run interactive configuration script: `./scripts/configure-mongodb.sh`
@@ -62,9 +72,9 @@ The ODL demo now uses a centralized configuration approach for MongoDB Atlas con
 - [ ] **For Host Networking (Recommended)**: Run `./scripts/deploy-hostnetwork.sh`
   - [ ] **AUTOMATIC**: Script checks for MongoDB configuration (`config/mongodb-config.local.env`)
   - [ ] **AUTOMATIC**: Script generates Kubernetes secrets from your configuration
+  - [ ] **AUTOMATIC**: Script builds Docker images for all microservices
   - [ ] This deploys all infrastructure including UIs in one command
-  - [ ] UIs are built inside Kubernetes using ConfigMaps
-  - [ ] No Docker image building required
+  - [ ] Uses proper Docker images instead of ConfigMaps
   - [ ] Direct access to all services on standard ports
 - [ ] **For Standard Deployment**: Run `./scripts/deploy.sh`
   - [ ] **AUTOMATIC**: Script checks for MongoDB configuration (`config/mongodb-config.local.env`)
@@ -72,6 +82,19 @@ The ODL demo now uses a centralized configuration approach for MongoDB Atlas con
 - [ ] Wait for all pods to be ready: `kubectl get pods -n odl-demo`
 - [ ] Verify all services are running: `kubectl get services -n odl-demo`
 - [ ] **IMPORTANT**: MongoDB secrets are now managed automatically - no manual editing required!
+
+### Alternative Deployment Options (If Docker Cannot Be Installed)
+
+#### Option A: Hybrid Deployment (Build Locally, Deploy Remotely)
+- [ ] **Requirements**: Docker on local machine, SSH access to remote
+- [ ] **Command**: `./scripts/deploy-hybrid.sh <remote-host> [remote-user]`
+- [ ] **Benefits**: No Docker installation needed on remote machine initially
+
+#### Option B: ConfigMap Deployment (No Docker Required)
+- [ ] **Requirements**: Only MicroK8s on remote machine
+- [ ] **Command**: `./scripts/deploy-remote-configmap.sh <remote-host> [remote-user]`
+- [ ] **Benefits**: Minimal setup, no Docker required
+- [ ] **Note**: Uses older ConfigMap approach (slower startup, not best practice)
 
 ### 2. Configure Connectors
 - [ ] Wait for Kafka Connect to be ready (5-10 minutes): `kubectl wait --for=condition=ready pod -l app=kafka-connect -n odl-demo --timeout=300s`
@@ -146,6 +169,22 @@ The ODL demo now uses a centralized configuration approach for MongoDB Atlas con
 ## Troubleshooting
 
 ### Common Issues
+
+#### Docker Installation Issues
+- [ ] **Error**: `Docker is not running locally`
+- [ ] **Solution**: Start Docker service: `sudo systemctl start docker`
+- [ ] **Error**: `Cannot connect to Docker daemon`
+- [ ] **Solution**: Add user to docker group: `sudo usermod -aG docker $USER && newgrp docker`
+- [ ] **Error**: `Permission denied while trying to connect to Docker daemon`
+- [ ] **Solution**: 
+  ```bash
+  sudo systemctl start docker
+  sudo systemctl enable docker
+  sudo usermod -aG docker $USER
+  newgrp docker
+  ```
+- [ ] **Error**: `Docker images not found on remote machine`
+- [ ] **Solution**: Use hybrid deployment: `./scripts/deploy-hybrid.sh <remote-host>`
 
 #### MongoDB Configuration Issues
 - [ ] **Error**: `MongoDB configuration not found: config/mongodb-config.local.env`

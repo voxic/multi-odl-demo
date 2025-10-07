@@ -39,6 +39,7 @@ MySQL (Source) → Debezium CDC → Kafka → MongoDB Atlas Cluster 1 (Primary O
 - curl
 - Node.js 18+ (for microservices)
 - Python 3.8+ (for data generation scripts)
+- **Docker** (for microservices deployment)
 
 ### MicroK8s Setup on Ubuntu 24.04
 
@@ -125,7 +126,28 @@ kubectl delete pod nginx
 kubectl delete service nginx
 ```
 
-#### 6. Troubleshooting MicroK8s
+#### 6. Install Docker (Required for Microservices)
+```bash
+# Install Docker
+sudo apt update
+sudo apt install -y docker.io
+
+# Start and enable Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Apply group changes (logout/login or use newgrp)
+newgrp docker
+
+# Verify Docker installation
+docker --version
+docker run hello-world
+```
+
+#### 7. Troubleshooting MicroK8s
 
 **If MicroK8s fails to start:**
 ```bash
