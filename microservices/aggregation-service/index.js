@@ -148,7 +148,7 @@ function safeDate(value) {
   return new Date(value);
 }
 
-// Extract actual data from CDC event
+// Extract actual data from CDC event or regular document
 function extractDataFromCDC(cdcEvent) {
   if (!cdcEvent) return null;
   
@@ -162,7 +162,9 @@ function extractDataFromCDC(cdcEvent) {
     return cdcEvent.after;
   }
   
-  return null;
+  // Handle regular MongoDB documents (no CDC structure)
+  // Return the document as-is if it doesn't have CDC structure
+  return cdcEvent;
 }
 
 // Helper function to get customer ID from CDC data
@@ -183,12 +185,17 @@ async function aggregateCustomerData(customerId) {
     const db1 = cluster1Client.db('banking');
     const db2 = cluster2Client.db('analytics');
     
-    // Get customer data from CDC events
+    // Get customer data - handle both CDC events and regular documents
     const customerCDC = await db1.collection('customers').findOne({ 
       $or: [
+        // CDC event format
         { 'after.customer_id': Long.fromString(customerId.toString()) },
         { 'after.customer_id': customerId },
-        { 'after.customer_id': { $numberLong: customerId.toString() } }
+        { 'after.customer_id': { $numberLong: customerId.toString() } },
+        // Regular document format
+        { 'customer_id': Long.fromString(customerId.toString()) },
+        { 'customer_id': customerId },
+        { 'customer_id': { $numberLong: customerId.toString() } }
       ]
     });
     
@@ -205,42 +212,66 @@ async function aggregateCustomerData(customerId) {
     
     logger.info(`Processing customer ${customerId}: ${safeString(customer.first_name)} ${safeString(customer.last_name)}`);
     
-    // Get customer accounts from CDC events
+    // Get customer accounts - handle both CDC events and regular documents
     const accountsCDC = await db1.collection('accounts').find({ 
       $or: [
+        // CDC event format
         { 'after.customer_id': Long.fromString(customerId.toString()) },
         { 'after.customer_id': customerId },
-        { 'after.customer_id': { $numberLong: customerId.toString() } }
+        { 'after.customer_id': { $numberLong: customerId.toString() } },
+        // Regular document format
+        { 'customer_id': Long.fromString(customerId.toString()) },
+        { 'customer_id': customerId },
+        { 'customer_id': { $numberLong: customerId.toString() } }
       ]
     }).toArray();
     
     const accounts = accountsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
     
-    // Get customer agreements from CDC events
+    // Get customer agreements - handle both CDC events and regular documents
     const agreementsCDC = await db1.collection('agreements').find({ 
       $or: [
+        // CDC event format
         { 'after.customer_id': Long.fromString(customerId.toString()) },
         { 'after.customer_id': customerId },
-        { 'after.customer_id': { $numberLong: customerId.toString() } }
+        { 'after.customer_id': { $numberLong: customerId.toString() } },
+        // Regular document format
+        { 'customer_id': Long.fromString(customerId.toString()) },
+        { 'customer_id': customerId },
+        { 'customer_id': { $numberLong: customerId.toString() } }
       ]
     }).toArray();
     
     const agreements = agreementsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
     
-    // Get recent transactions (last 30 days) from CDC events
+    // Get recent transactions (last 30 days) - handle both CDC events and regular documents
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
     const accountIds = accounts.map(acc => acc.account_id);
     const transactionsCDC = await db1.collection('transactions').find({
-      $or: [
-        { 'after.account_id': { $in: accountIds } },
-        { 'after.account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } },
-        { 'after.account_id': { $in: accountIds.map(id => ({ $numberLong: id.toString() })) } }
-      ],
-      'after.transaction_date': { 
-        $gte: Long.fromNumber(thirtyDaysAgo.getTime())
-      }
+      $and: [
+        {
+          $or: [
+            // CDC event format
+            { 'after.account_id': { $in: accountIds } },
+            { 'after.account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } },
+            { 'after.account_id': { $in: accountIds.map(id => ({ $numberLong: id.toString() })) } },
+            // Regular document format
+            { 'account_id': { $in: accountIds } },
+            { 'account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } },
+            { 'account_id': { $in: accountIds.map(id => ({ $numberLong: id.toString() })) } }
+          ]
+        },
+        {
+          $or: [
+            // CDC event format
+            { 'after.transaction_date': { $gte: Long.fromNumber(thirtyDaysAgo.getTime()) } },
+            // Regular document format
+            { 'transaction_date': { $gte: thirtyDaysAgo.getTime() } }
+          ]
+        }
+      ]
     }).toArray();
     
     const transactions = transactionsCDC.map(cdc => extractDataFromCDC(cdc)).filter(Boolean);
