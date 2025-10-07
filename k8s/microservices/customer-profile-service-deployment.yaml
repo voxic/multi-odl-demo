@@ -79,48 +79,4 @@ spec:
     port: 3001
     targetPort: 3001
   type: ClusterIP
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: customer-profile-source
-data:
-  package.json: |
-    {
-      "name": "customer-profile-service",
-      "version": "1.0.0",
-      "description": "Customer profile aggregation service for landing page",
-      "main": "index.js",
-      "scripts": {
-        "start": "node index.js"
-      },
-      "dependencies": {
-        "mongodb": "^6.3.0",
-        "express": "^4.18.2",
-        "dotenv": "^16.3.1",
-        "winston": "^3.11.0"
-      }
-    }
-  index.js: |
-    const { MongoClient, Long } = require('mongodb');
-    const express = require('express');
-    const winston = require('winston');
-    require('dotenv').config();
-    const logger = winston.createLogger({ level: 'info', format: winston.format.combine(winston.format.timestamp(), winston.format.json()), transports: [ new winston.transports.Console() ]});
-    const CLUSTER1_URI = process.env.CLUSTER1_URI; const CLUSTER2_URI = process.env.CLUSTER2_URI;
-    let c1, c2; let isProcessing = false;
-    function extractDataFromCDC(doc){ return doc && doc.after ? doc.after : null; }
-    function safeNumber(v,d=0){ if(v==null) return d; if(typeof v==='object'&&v.$numberLong) return parseInt(v.$numberLong); const n=parseFloat(v); return isNaN(n)?d:n; }
-    function safeString(v,d=''){ if(v==null) return d; return typeof v==='string'?v:String(v); }
-    function safeDate(v){ if(v==null) return null; if(typeof v==='object'&&v.$numberLong) return new Date(parseInt(v.$numberLong)); if(typeof v==='string') return new Date(v); return new Date(v); }
-    async function init(){ c1=new MongoClient(CLUSTER1_URI); c2=new MongoClient(CLUSTER2_URI); await c1.connect(); await c2.connect(); }
-    async function buildProfile(customerId){ const db1=c1.db('banking'); const db2=c2.db('analytics'); const custCDC=await db1.collection('customers').findOne({'after.customer_id': Long.fromString(customerId.toString())}); if(!custCDC) return; const customer=extractDataFromCDC(custCDC); const accountsCDC=await db1.collection('accounts').find({'after.customer_id': Long.fromString(customerId.toString())}).toArray(); const accounts=accountsCDC.map(extractDataFromCDC).filter(Boolean); const overviews=[]; for(const acc of accounts){ const accId=safeNumber(acc.account_id); const txCDC=await db1.collection('transactions').find({'after.account_id': Long.fromString(accId.toString())}).sort({'after.transaction_date': -1}).limit(10).toArray(); const tx=txCDC.map(extractDataFromCDC).filter(Boolean).map(t=>({ transaction_id: safeNumber(t.transaction_id), transaction_date: safeDate(t.transaction_date), amount: safeNumber(t.amount), type: safeString(t.transaction_type), description: safeString(t.description) })); overviews.push({ account_id: accId, account_type: safeString(acc.account_type), balance: safeNumber(acc.balance), currency: safeString(acc.currency,'USD'), transactions: tx }); }
-      const doc={ customer_id: safeNumber(customer.customer_id), profile: { name: `${safeString(customer.first_name)} ${safeString(customer.last_name)}`.trim(), email: safeString(customer.email), phone: safeString(customer.phone), address: `${safeString(customer.address_line1)} ${safeString(customer.address_line2||'')}`.trim(), location: `${safeString(customer.city)}, ${safeString(customer.state)}`.trim(), postal_code: safeString(customer.postal_code), country: safeString(customer.country), status: safeString(customer.customer_status,'UNKNOWN'), date_of_birth: safeDate(customer.date_of_birth) }, accounts: overviews, updated_at: new Date() };
-      await db2.collection('customer_profile').replaceOne({ customer_id: doc.customer_id }, doc, { upsert: true }); }
-    async function all(){ if(isProcessing) return; isProcessing=true; try{ const db1=c1.db('banking'); const customers=await db1.collection('customers').find({}).toArray(); const ids=[...new Set(customers.map(c=>{const d=extractDataFromCDC(c); return d? safeNumber(d.customer_id):null;}).filter(Boolean))]; for(const id of ids){ await buildProfile(id); await new Promise(r=>setTimeout(r,50)); } } finally{ isProcessing=false; } }
-    async function watch(){ const db1=c1.db('banking'); db1.collection('customers').watch([], {fullDocument:'updateLookup'}).on('change', async ch=>{ if(ch.operationType==='insert'||ch.operationType==='update'){ const d=extractDataFromCDC(ch.fullDocument); if(d&&d.customer_id) await buildProfile(safeNumber(d.customer_id)); }}); db1.collection('accounts').watch([], {fullDocument:'updateLookup'}).on('change', async ch=>{ if(ch.operationType==='insert'||ch.operationType==='update'){ const d=extractDataFromCDC(ch.fullDocument); if(d&&d.customer_id) await buildProfile(safeNumber(d.customer_id)); }}); db1.collection('transactions').watch([], {fullDocument:'updateLookup'}).on('change', async ch=>{ if(ch.operationType==='insert'||ch.operationType==='update'){ const t=extractDataFromCDC(ch.fullDocument); if(t&&t.account_id){ const accCDC=await db1.collection('accounts').findOne({'after.account_id': Long.fromString(safeNumber(t.account_id).toString())}); const acc=extractDataFromCDC(accCDC); if(acc&&acc.customer_id) await buildProfile(safeNumber(acc.customer_id)); } }}); }
-    const app = express(); app.use(express.json());
-    app.get('/health', (req,res)=> res.json({status:'healthy', processing:isProcessing, timestamp:new Date().toISOString()}));
-    app.post('/profile', async (req,res)=>{ const {customerId}=req.body||{}; if(customerId){ await buildProfile(customerId); res.json({message:`Rebuilt profile for ${customerId}`}); } else { await all(); res.json({message:'Started rebuilding profiles for all customers'}); }});
-    (async ()=>{ await init(); await all(); await watch(); const port=process.env.PORT||3001; app.listen(port, ()=> console.log(`customer-profile-service on ${port}`)); })();
 

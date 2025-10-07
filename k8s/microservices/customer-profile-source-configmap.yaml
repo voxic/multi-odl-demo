@@ -1,0 +1,300 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: customer-profile-source
+data:
+  package.json: |
+    {
+      "name": "customer-profile-service",
+      "version": "1.0.0",
+      "description": "Customer profile aggregation service for landing page",
+      "main": "index.js",
+      "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js"
+      },
+      "dependencies": {
+        "mongodb": "^6.3.0",
+        "express": "^4.18.2",
+        "dotenv": "^16.3.1",
+        "winston": "^3.11.0"
+      },
+      "devDependencies": {
+        "nodemon": "^3.0.2"
+      },
+      "keywords": ["mongodb", "atlas", "profile", "aggregation", "odl"],
+      "author": "ODL Demo Team",
+      "license": "MIT"
+    }
+  index.js: |
+    const { MongoClient, Long } = require('mongodb');
+    const express = require('express');
+    const winston = require('winston');
+    require('dotenv').config();
+
+    // Configure logger
+    const logger = winston.createLogger({
+      level: 'info',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+      transports: [
+        new winston.transports.Console(),
+        new winston.transports.File({ filename: 'customer-profile-service.log' })
+      ]
+    });
+
+    // MongoDB connection strings
+    const CLUSTER1_URI = process.env.CLUSTER1_URI || 'mongodb+srv://odl-reader:password@cluster1.mongodb.net/banking?retryWrites=true&w=majority';
+    const CLUSTER2_URI = process.env.CLUSTER2_URI || 'mongodb+srv://odl-writer:password@cluster2.mongodb.net/analytics?retryWrites=true&w=majority';
+
+    let cluster1Client, cluster2Client;
+    let isProcessing = false;
+
+    async function initializeConnections() {
+      try {
+        cluster1Client = new MongoClient(CLUSTER1_URI);
+        cluster2Client = new MongoClient(CLUSTER2_URI);
+
+        await cluster1Client.connect();
+        await cluster2Client.connect();
+
+        logger.info('Connected to both MongoDB Atlas clusters (profile service)');
+
+        await cluster1Client.db('banking').admin().ping();
+        await cluster2Client.db('analytics').admin().ping();
+      } catch (error) {
+        logger.error('Failed to connect to MongoDB Atlas clusters:', error);
+        process.exit(1);
+      }
+    }
+
+    function safeNumber(value, defaultValue = 0) {
+      if (value === null || value === undefined) return defaultValue;
+      if (typeof value === 'object' && value.$numberLong) {
+        return parseInt(value.$numberLong);
+      }
+      const num = parseFloat(value);
+      return isNaN(num) ? defaultValue : num;
+    }
+
+    function safeString(value, defaultValue = '') {
+      if (value === null || value === undefined) return defaultValue;
+      if (typeof value === 'string') return value;
+      return String(value);
+    }
+
+    function safeDate(value) {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'object' && value.$numberLong) {
+        return new Date(parseInt(value.$numberLong));
+      }
+      if (typeof value === 'string') return new Date(value);
+      return new Date(value);
+    }
+
+    function extractDataFromCDC(cdcEvent) {
+      if (!cdcEvent || !cdcEvent.after) return null;
+      return cdcEvent.after;
+    }
+
+    async function buildCustomerProfile(customerId) {
+      try {
+        const db1 = cluster1Client.db('banking');
+        const db2 = cluster2Client.db('analytics');
+
+        const customerCDC = await db1.collection('customers').findOne({
+          'after.customer_id': Long.fromString(customerId.toString())
+        });
+        if (!customerCDC) {
+          logger.warn(`Customer ${customerId} not found`);
+          return;
+        }
+        const customer = extractDataFromCDC(customerCDC);
+        if (!customer) return;
+
+        const accountsCDC = await db1.collection('accounts').find({
+          'after.customer_id': Long.fromString(customerId.toString())
+        }).toArray();
+        const accounts = accountsCDC.map(extractDataFromCDC).filter(Boolean);
+
+        // Fetch 10 most recent transactions per account
+        const accountOverviews = [];
+        for (const account of accounts) {
+          const accountId = safeNumber(account.account_id);
+          const txCDC = await db1.collection('transactions')
+            .find({ 'after.account_id': Long.fromString(accountId.toString()) })
+            .sort({ 'after.transaction_date': -1 })
+            .limit(10)
+            .toArray();
+          const transactions = txCDC.map(extractDataFromCDC).filter(Boolean).map(t => ({
+            transaction_id: safeNumber(t.transaction_id),
+            transaction_date: safeDate(t.transaction_date),
+            amount: safeNumber(t.amount),
+            type: safeString(t.transaction_type),
+            description: safeString(t.description)
+          }));
+
+          accountOverviews.push({
+            account_id: accountId,
+            account_type: safeString(account.account_type),
+            balance: safeNumber(account.balance),
+            currency: safeString(account.currency, 'USD'),
+            transactions
+          });
+        }
+
+        const profileDoc = {
+          customer_id: safeNumber(customer.customer_id),
+          profile: {
+            name: `${safeString(customer.first_name)} ${safeString(customer.last_name)}`.trim(),
+            email: safeString(customer.email),
+            phone: safeString(customer.phone),
+            address: `${safeString(customer.address_line1)} ${safeString(customer.address_line2 || '')}`.trim(),
+            location: `${safeString(customer.city)}, ${safeString(customer.state)}`.trim(),
+            postal_code: safeString(customer.postal_code),
+            country: safeString(customer.country),
+            status: safeString(customer.customer_status, 'UNKNOWN'),
+            date_of_birth: safeDate(customer.date_of_birth)
+          },
+          accounts: accountOverviews,
+          updated_at: new Date()
+        };
+
+        const result = await db2.collection('customer_profile').replaceOne(
+          { customer_id: profileDoc.customer_id },
+          profileDoc,
+          { upsert: true }
+        );
+
+        logger.info(`Upserted customer_profile for ${customerId}`, {
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          upsertedId: result.upsertedId
+        });
+      } catch (error) {
+        logger.error(`Error building customer profile for ${customerId}:`, error);
+      }
+    }
+
+    async function processAllCustomers() {
+      if (isProcessing) return;
+      isProcessing = true;
+      try {
+        const db1 = cluster1Client.db('banking');
+        const customersCDC = await db1.collection('customers').find({}).toArray();
+        const customerIds = [...new Set(customersCDC.map(cdc => {
+          const c = extractDataFromCDC(cdc);
+          return c ? safeNumber(c.customer_id) : null;
+        }).filter(Boolean))];
+
+        for (const customerId of customerIds) {
+          await buildCustomerProfile(customerId);
+          await new Promise(r => setTimeout(r, 50));
+        }
+      } catch (error) {
+        logger.error('Error processing all customers:', error);
+      } finally {
+        isProcessing = false;
+      }
+    }
+
+    async function setupChangeStreams() {
+      try {
+        const db1 = cluster1Client.db('banking');
+
+        const customersStream = db1.collection('customers').watch([], { fullDocument: 'updateLookup' });
+        customersStream.on('change', async (change) => {
+          if (change.operationType === 'insert' || change.operationType === 'update') {
+            const customer = extractDataFromCDC(change.fullDocument);
+            if (customer && customer.customer_id) {
+              await buildCustomerProfile(safeNumber(customer.customer_id));
+            }
+          }
+        });
+
+        const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
+        accountsStream.on('change', async (change) => {
+          if (change.operationType === 'insert' || change.operationType === 'update') {
+            const account = extractDataFromCDC(change.fullDocument);
+            if (account && account.customer_id) {
+              await buildCustomerProfile(safeNumber(account.customer_id));
+            }
+          }
+        });
+
+        const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
+        transactionsStream.on('change', async (change) => {
+          if (change.operationType === 'insert' || change.operationType === 'update') {
+            const tx = extractDataFromCDC(change.fullDocument);
+            if (tx && tx.account_id) {
+              const accountCDC = await db1.collection('accounts').findOne({
+                'after.account_id': Long.fromString(safeNumber(tx.account_id).toString())
+              });
+              const account = extractDataFromCDC(accountCDC);
+              if (account && account.customer_id) {
+                await buildCustomerProfile(safeNumber(account.customer_id));
+              }
+            }
+          }
+        });
+      } catch (error) {
+        logger.error('Error setting up change streams:', error);
+      }
+    }
+
+    const app = express();
+    app.use(express.json());
+
+    app.get('/health', (req, res) => {
+      res.json({ status: 'healthy', processing: isProcessing, timestamp: new Date().toISOString() });
+    });
+
+    app.post('/profile', async (req, res) => {
+      const { customerId } = req.body;
+      if (customerId) {
+        await buildCustomerProfile(customerId);
+        res.json({ message: `Rebuilt profile for ${customerId}` });
+      } else {
+        await processAllCustomers();
+        res.json({ message: 'Started rebuilding profiles for all customers' });
+      }
+    });
+
+    app.get('/customers/:id', async (req, res) => {
+      try {
+        const db2 = cluster2Client.db('analytics');
+        const customerId = parseInt(req.params.id);
+        const doc = await db2.collection('customer_profile').findOne({ customer_id: customerId });
+        if (!doc) return res.status(404).json({ error: 'Profile not found' });
+        res.json(doc);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    async function start() {
+      try {
+        await initializeConnections();
+        await processAllCustomers();
+        await setupChangeStreams();
+
+        const port = process.env.PORT || 3001;
+        app.listen(port, () => logger.info(`Customer profile service started on ${port}`));
+
+        setInterval(processAllCustomers, 10 * 60 * 1000);
+      } catch (error) {
+        logger.error('Failed to start customer profile service:', error);
+        process.exit(1);
+      }
+    }
+
+    process.on('SIGINT', async () => {
+      logger.info('Shutting down customer profile service...');
+      if (cluster1Client) await cluster1Client.close();
+      if (cluster2Client) await cluster2Client.close();
+      process.exit(0);
+    });
+
+    start();

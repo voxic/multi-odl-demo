@@ -52,7 +52,9 @@ REQUIRED_FILES=(
     "k8s/kafka/kafka-hostnetwork.yaml"
     "k8s/kafka/kafka-connect-hostnetwork.yaml"
     "k8s/microservices/aggregation-service-deployment.yaml"
+    "k8s/microservices/aggregation-source-configmap.yaml"
     "k8s/microservices/customer-profile-service-deployment.yaml"
+    "k8s/microservices/customer-profile-source-configmap.yaml"
     "k8s/microservices/legacy-ui-deployment.yaml"
     "k8s/microservices/analytics-ui-deployment.yaml"
     "k8s/connectors/debezium-mysql-connector-hostnetwork.json"
@@ -129,12 +131,10 @@ if ! kubectl run mysql-client --image=mysql:8.0 --rm -i --restart=Never -n odl-d
     print_warning "Failed to generate sample data (this may be expected if data already exists)"
 fi
 
-# Create configmap with source code
-print_status "Creating source code configmap..."
-kubectl create configmap aggregation-source -n odl-demo \
-  --from-file=package.json=microservices/aggregation-service/package.json \
-  --from-file=index.js=microservices/aggregation-service/index.js \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Create configmaps with source code
+print_status "Creating source code configmaps..."
+kubectl apply -f k8s/microservices/aggregation-source-configmap.yaml -n odl-demo
+kubectl apply -f k8s/microservices/customer-profile-source-configmap.yaml -n odl-demo
 
 print_status "Deploying aggregation service..."
 kubectl apply -f k8s/microservices/aggregation-service-deployment.yaml -n odl-demo
