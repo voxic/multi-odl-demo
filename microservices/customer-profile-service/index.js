@@ -367,16 +367,35 @@ async function setupChangeStreams() {
         const transaction = change.fullDocument;
         logger.info('Transaction data from change stream:', JSON.stringify(transaction, null, 2));
         if (transaction && transaction.account_id) {
-          // Find the account to get the customer_id
-          const account = await db1.collection('accounts').findOne({ 
-            account_id: safeBase64Number(transaction.account_id)
+          // Find the account to get the customer_id - handle both CDC events and regular documents
+          const accountId = safeBase64Number(transaction.account_id);
+          const account = await db1.collection('accounts').findOne({
+            $or: [
+              // CDC event format
+              { 'after.account_id': Long.fromString(accountId.toString()) },
+              { 'after.account_id': accountId },
+              // Regular document format
+              { 'account_id': Long.fromString(accountId.toString()) },
+              { 'account_id': accountId }
+            ]
+          }, { 
+            sort: { 
+              'ts_ms': -1,  // Sort by timestamp descending to get latest
+              '_id': -1     // Secondary sort by _id for consistency
+            } 
           });
-          if (account && account.customer_id) {
-            const customerId = safeBase64Number(account.customer_id);
-            logger.info(`Triggering profile rebuild for customer ${customerId} due to transaction change`);
-            await buildCustomerProfile(customerId);
+          
+          if (account) {
+            const accountData = extractDataFromCDC(account);
+            if (accountData && accountData.customer_id) {
+              const customerId = safeBase64Number(accountData.customer_id);
+              logger.info(`Triggering profile rebuild for customer ${customerId} due to transaction change`);
+              await buildCustomerProfile(customerId);
+            } else {
+              logger.warn(`Could not extract customer_id from account ${accountId}`);
+            }
           } else {
-            logger.warn(`Could not find account ${transaction.account_id} for transaction`);
+            logger.warn(`Could not find account ${accountId} for transaction`);
           }
         }
       }
