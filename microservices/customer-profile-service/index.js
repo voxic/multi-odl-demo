@@ -41,11 +41,71 @@ async function initializeConnections() {
   }
 }
 
+// Helper function to decode base64 encoded fields
+function decodeBase64Field(value) {
+  if (typeof value === 'string' && value.length > 0) {
+    try {
+      // Try to decode as base64
+      const buffer = Buffer.from(value, 'base64');
+      
+      // Try to interpret as binary-encoded number
+      if (buffer.length === 1) {
+        // 8-bit integer
+        return buffer.readUInt8(0);
+      } else if (buffer.length === 2) {
+        // 16-bit integer
+        return buffer.readUInt16BE(0);
+      } else if (buffer.length === 3) {
+        // 3-byte case - treat as 16-bit integer from first 2 bytes
+        return buffer.readUInt16BE(0);
+      } else if (buffer.length === 4) {
+        // 32-bit integer
+        return buffer.readUInt32BE(0);
+      } else if (buffer.length === 8) {
+        // 64-bit integer
+        return Number(buffer.readBigUInt64BE(0));
+      } else {
+        // Try as text first
+        const decoded = buffer.toString('utf-8');
+        const num = parseFloat(decoded);
+        if (!isNaN(num)) {
+          return num;
+        }
+        return decoded;
+      }
+    } catch (error) {
+      // If decoding fails, return original value
+      return value;
+    }
+  }
+  return value;
+}
+
 function safeNumber(value, defaultValue = 0) {
   if (value === null || value === undefined) return defaultValue;
   if (typeof value === 'object' && value.$numberLong) {
     return parseInt(value.$numberLong);
   }
+  const num = parseFloat(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
+// Helper function to safely get base64-encoded numeric values from CDC data
+function safeBase64Number(value, defaultValue = 0) {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Handle NumberLong objects
+  if (typeof value === 'object' && value.$numberLong) {
+    return parseInt(value.$numberLong);
+  }
+  
+  // Handle base64 encoded values
+  if (typeof value === 'string') {
+    const decoded = decodeBase64Field(value);
+    const num = parseFloat(decoded);
+    return isNaN(num) ? defaultValue : num;
+  }
+  
   const num = parseFloat(value);
   return isNaN(num) ? defaultValue : num;
 }
@@ -138,7 +198,7 @@ async function buildCustomerProfile(customerId) {
     // Fetch 10 most recent transactions per account
     const accountOverviews = [];
     for (const account of accounts) {
-      const accountId = safeNumber(account.account_id);
+      const accountId = safeBase64Number(account.account_id);
       const txCDC = await db1.collection('transactions')
         .find({ 
           $or: [
@@ -157,24 +217,24 @@ async function buildCustomerProfile(customerId) {
         .limit(10)
         .toArray();
       const transactions = txCDC.map(extractDataFromCDC).filter(Boolean).map(t => ({
-        transaction_id: safeNumber(t.transaction_id),
+        transaction_id: safeBase64Number(t.transaction_id),
         transaction_date: safeDate(t.transaction_date),
-        amount: safeNumber(t.amount),
+        amount: safeBase64Number(t.amount),
         type: safeString(t.transaction_type),
         description: safeString(t.description)
       }));
 
       accountOverviews.push({
-        account_id: accountId,
+        account_id: safeBase64Number(account.account_id),
         account_type: safeString(account.account_type),
-        balance: safeNumber(account.balance),
+        balance: safeBase64Number(account.balance),
         currency: safeString(account.currency, 'USD'),
         transactions
       });
     }
 
     const profileDoc = {
-      customer_id: safeNumber(customer.customer_id),
+      customer_id: safeBase64Number(customer.customer_id),
       profile: {
         name: `${safeString(customer.first_name)} ${safeString(customer.last_name)}`.trim(),
         email: safeString(customer.email),
@@ -214,7 +274,7 @@ async function processAllCustomers() {
     const customersCDC = await db1.collection('customers').find({}).toArray();
     const customerIds = [...new Set(customersCDC.map(cdc => {
       const c = extractDataFromCDC(cdc);
-      return c ? safeNumber(c.customer_id) : null;
+      return c ? safeBase64Number(c.customer_id) : null;
     }).filter(Boolean))];
     
     logger.info(`Found ${customerIds.length} unique customers to process`);
@@ -268,7 +328,7 @@ async function setupChangeStreams() {
         }
         
         if (customer && customer.customer_id) {
-          const customerId = safeNumber(customer.customer_id);
+          const customerId = safeBase64Number(customer.customer_id);
           logger.info(`✅ Valid customer data found! Customer ID: ${customerId}`);
           logger.info(`Triggering profile rebuild for customer ${customerId} due to customer change`);
           await buildCustomerProfile(customerId);
@@ -291,7 +351,7 @@ async function setupChangeStreams() {
         const account = change.fullDocument;
         logger.info('Account data from change stream:', JSON.stringify(account, null, 2));
         if (account && account.customer_id) {
-          const customerId = safeNumber(account.customer_id);
+          const customerId = safeBase64Number(account.customer_id);
           logger.info(`Triggering profile rebuild for customer ${customerId} due to account change`);
           await buildCustomerProfile(customerId);
         }
@@ -309,10 +369,10 @@ async function setupChangeStreams() {
         if (transaction && transaction.account_id) {
           // Find the account to get the customer_id
           const account = await db1.collection('accounts').findOne({ 
-            account_id: safeNumber(transaction.account_id)
+            account_id: safeBase64Number(transaction.account_id)
           });
           if (account && account.customer_id) {
-            const customerId = safeNumber(account.customer_id);
+            const customerId = safeBase64Number(account.customer_id);
             logger.info(`Triggering profile rebuild for customer ${customerId} due to transaction change`);
             await buildCustomerProfile(customerId);
           } else {
