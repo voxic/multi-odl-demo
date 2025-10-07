@@ -202,6 +202,10 @@ async function buildCustomerProfile(customerId) {
         const accountId = safeBase64Number(account.account_id);
         // Only keep the latest version of each account (since we sorted by ts_ms desc)
         if (!accountsMap.has(accountId)) {
+          // Debug logging for account data
+          logger.info(`Account ${accountId} raw data:`, JSON.stringify(account, null, 2));
+          logger.info(`Account ${accountId} balance raw:`, account.balance);
+          logger.info(`Account ${accountId} balance decoded:`, safeBase64Number(account.balance));
           accountsMap.set(accountId, account);
         }
       }
@@ -237,6 +241,9 @@ async function buildCustomerProfile(customerId) {
           const transactionId = safeBase64Number(transaction.transaction_id);
           // Only keep the latest version of each transaction (since we sorted by ts_ms desc)
           if (!transactionsMap.has(transactionId)) {
+            // Debug logging for transaction amounts
+            logger.info(`Transaction ${transactionId} amount raw:`, transaction.amount);
+            logger.info(`Transaction ${transactionId} amount decoded:`, safeBase64Number(transaction.amount));
             transactionsMap.set(transactionId, {
               transaction_id: transactionId,
               transaction_date: safeDate(transaction.transaction_date),
