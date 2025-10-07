@@ -16,8 +16,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSystemStatus();
     loadRandomCustomer();
     
-    // Refresh customer every 30 seconds
-    setInterval(loadRandomCustomer, 30000);
 });
 
 // Load system status
