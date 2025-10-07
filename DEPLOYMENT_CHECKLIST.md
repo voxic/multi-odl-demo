@@ -19,27 +19,59 @@
 - [ ] Check available resources: `kubectl top nodes`
 - [ ] Ensure VM has internet access for pulling images
 
-### 3. Code Preparation
-- [ ] Clone repository to VM
-- [ ] Install Python dependencies: `pip install -r requirements.txt`
-- [ ] Update MongoDB connection strings in `k8s/microservices/aggregation-service-deployment.yaml`
-- [ ] Update MongoDB connection strings in `k8s/microservices/customer-profile-service-deployment.yaml`
-- [ ] Update MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`
-- [ ] Replace `YOUR_PASSWORD` with actual `odl-writer` password in connector config
-- [ ] Make deployment scripts executable: `chmod +x scripts/*.sh`
-- [ ] **Note**: The aggregation service has been updated to work with the flat MySQL data structure (not nested)
+### 3. MongoDB Atlas Configuration
+- [ ] **NEW APPROACH**: Run interactive configuration script: `./scripts/configure-mongodb.sh`
+  - [ ] This will prompt for Cluster 1 details (host, database, username, password)
+  - [ ] This will prompt for Cluster 2 details (host, database, username, password)
+  - [ ] Creates `config/mongodb-config.local.env` with your credentials
+- [ ] **ALTERNATIVE**: Manually create `config/mongodb-config.local.env` with MongoDB Atlas details
+- [ ] Verify configuration file exists: `ls -la config/mongodb-config.local.env`
+- [ ] **IMPORTANT**: The configuration file is automatically gitignored for security
+
+## MongoDB Configuration Management
+
+### New Centralized Approach
+The ODL demo now uses a centralized configuration approach for MongoDB Atlas connection strings:
+
+- **Configuration File**: `config/mongodb-config.local.env`
+- **Interactive Setup**: `./scripts/configure-mongodb.sh`
+- **Secret Generation**: `./scripts/generate-mongodb-secrets.sh`
+- **Automatic Integration**: Deployment scripts handle everything automatically
+
+### Configuration Steps
+1. **Run Configuration Script**: `./scripts/configure-mongodb.sh`
+   - Prompts for Cluster 1 details (Primary ODL)
+   - Prompts for Cluster 2 details (Analytics)
+   - Creates `config/mongodb-config.local.env`
+
+2. **Deploy**: `./scripts/deploy-hostnetwork.sh` or `./scripts/deploy.sh`
+   - Automatically checks for MongoDB configuration
+   - Generates Kubernetes secrets
+   - Deploys all components with proper MongoDB connectivity
+
+### Benefits
+- ✅ Single configuration point for all MongoDB connections
+- ✅ Automatic Kubernetes secret management
+- ✅ No manual editing of deployment files
+- ✅ Secure (local config files are gitignored)
+- ✅ Consistent across all components
 
 ## Deployment Steps
 
 ### 1. Deploy Infrastructure (Single Command)
 - [ ] **For Host Networking (Recommended)**: Run `./scripts/deploy-hostnetwork.sh`
+  - [ ] **AUTOMATIC**: Script checks for MongoDB configuration (`config/mongodb-config.local.env`)
+  - [ ] **AUTOMATIC**: Script generates Kubernetes secrets from your configuration
   - [ ] This deploys all infrastructure including UIs in one command
   - [ ] UIs are built inside Kubernetes using ConfigMaps
   - [ ] No Docker image building required
   - [ ] Direct access to all services on standard ports
 - [ ] **For Standard Deployment**: Run `./scripts/deploy.sh`
+  - [ ] **AUTOMATIC**: Script checks for MongoDB configuration (`config/mongodb-config.local.env`)
+  - [ ] **AUTOMATIC**: Script generates Kubernetes secrets from your configuration
 - [ ] Wait for all pods to be ready: `kubectl get pods -n odl-demo`
 - [ ] Verify all services are running: `kubectl get services -n odl-demo`
+- [ ] **IMPORTANT**: MongoDB secrets are now managed automatically - no manual editing required!
 
 ### 2. Configure Connectors
 - [ ] Wait for Kafka Connect to be ready (5-10 minutes): `kubectl wait --for=condition=ready pod -l app=kafka-connect -n odl-demo --timeout=300s`
@@ -50,6 +82,7 @@
 - [ ] Verify connectors are running: `curl http://localhost:8083/connectors`
 - [ ] Check MySQL connector status: `curl http://localhost:8083/connectors/mysql-connector/status`
 - [ ] Check MongoDB Atlas connector status: `curl http://localhost:8083/connectors/mongodb-atlas-connector/status`
+- [ ] **IMPORTANT**: MongoDB Atlas connector now uses environment variables from Kubernetes secrets
 - [ ] **IMPORTANT**: If MySQL connector fails with permission errors, the init scripts should handle this automatically
 
 ### 3. Generate Sample Data
@@ -113,6 +146,28 @@
 ## Troubleshooting
 
 ### Common Issues
+
+#### MongoDB Configuration Issues
+- [ ] **Error**: `MongoDB configuration not found: config/mongodb-config.local.env`
+- [ ] **Solution**: Run the configuration script: `./scripts/configure-mongodb.sh`
+- [ ] **Error**: `Failed to generate MongoDB secrets`
+- [ ] **Solution**: Check configuration file and run manually: `./scripts/generate-mongodb-secrets.sh`
+- [ ] **Error**: `Required variable MONGO_CLUSTER1_URI is not set`
+- [ ] **Solution**: Verify `config/mongodb-config.local.env` has all required variables
+- [ ] **Error**: MongoDB connection failures in microservices
+- [ ] **Solution**: Check if `mongodb-secrets` secret exists: `kubectl get secret mongodb-secrets -n odl-demo`
+
+#### MongoDB Atlas Connector Issues
+- [ ] **Error**: `Connection refused to MongoDB Atlas cluster`
+- [ ] **Solution**: 
+  - Verify IP whitelist in MongoDB Atlas
+  - Check connection string format in `config/mongodb-config.local.env`
+  - Test connection: `mongosh "mongodb+srv://odl-writer:PASSWORD@cluster1.mongodb.net/banking"`
+- [ ] **Error**: `Authentication failed`
+- [ ] **Solution**: 
+  - Verify username and password in `config/mongodb-config.local.env`
+  - Check user permissions in MongoDB Atlas
+  - Regenerate secrets: `./scripts/generate-mongodb-secrets.sh`
 
 #### MySQL Connector Permission Errors
 - [ ] **Error**: `Access denied; you need (at least one of) the RELOAD or FLUSH_TABLES privilege(s)`
@@ -202,6 +257,11 @@
 ### Debug Commands
 - [ ] Check all pods: `kubectl get pods -n odl-demo`
 - [ ] Check connector status: `curl http://localhost:8083/connectors`
+- [ ] **MongoDB Configuration Debug**:
+  - [ ] Check if config file exists: `ls -la config/mongodb-config.local.env`
+  - [ ] View configuration: `cat config/mongodb-config.local.env`
+  - [ ] Check MongoDB secrets: `kubectl get secret mongodb-secrets -n odl-demo -o yaml`
+  - [ ] Test secret generation: `./scripts/generate-mongodb-secrets.sh`
 - [ ] View MySQL logs: `kubectl logs -n odl-demo deployment/mysql --tail=50`
 - [ ] View Kafka Connect logs: `kubectl logs -n odl-demo deployment/kafka-connect --tail=50`
 - [ ] View aggregation service logs: `kubectl logs -n odl-demo deployment/aggregation-service --tail=50`
@@ -226,7 +286,9 @@
   - Check connector logs: `kubectl logs deployment/kafka-connect -n odl-demo | grep mysql-connector`
 - [ ] **MongoDB Atlas Connector Issues**:
   - Check connector status: `curl http://localhost:8083/connectors/mongodb-atlas-connector/status`
-  - Verify connection string is correct in `k8s/connectors/mongodb-atlas-connector.json`
+  - **NEW**: Verify MongoDB configuration: `cat config/mongodb-config.local.env`
+  - **NEW**: Check if secrets are generated: `kubectl get secret mongodb-secrets -n odl-demo`
+  - **NEW**: Regenerate secrets if needed: `./scripts/generate-mongodb-secrets.sh`
   - Test MongoDB connection from VM: `mongosh "mongodb+srv://odl-writer:PASSWORD@cluster1.mongodb.net/banking"`
   - Check connector logs: `kubectl logs deployment/kafka-connect -n odl-demo | grep mongodb-atlas-connector`
 - [ ] **Data Flow Issues**:

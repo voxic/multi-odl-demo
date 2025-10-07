@@ -45,6 +45,26 @@ fi
 
 print_status "Kubernetes cluster is accessible"
 
+# Check MongoDB configuration
+CONFIG_DIR="config"
+LOCAL_CONFIG_FILE="$CONFIG_DIR/mongodb-config.local.env"
+
+if [ ! -f "$LOCAL_CONFIG_FILE" ]; then
+    print_warning "MongoDB configuration not found: $LOCAL_CONFIG_FILE"
+    print_status "Please run './scripts/configure-mongodb.sh' first to set up your MongoDB Atlas configuration."
+    print_status "Alternatively, you can manually create the configuration file with your MongoDB Atlas credentials."
+    exit 1
+fi
+
+print_status "MongoDB configuration found: $LOCAL_CONFIG_FILE"
+
+# Generate MongoDB secrets from configuration
+print_status "Generating MongoDB secrets from configuration..."
+if ! ./scripts/generate-mongodb-secrets.sh; then
+    print_error "Failed to generate MongoDB secrets"
+    exit 1
+fi
+
 # Check if required files exist
 REQUIRED_FILES=(
     "k8s/mysql/mysql-hostnetwork.yaml"

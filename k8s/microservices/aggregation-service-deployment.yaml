@@ -79,12 +79,6 @@ spec:
     port: 3000
     targetPort: 3000
   type: ClusterIP
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mongodb-secrets
-type: Opaque
-stringData:
-  cluster1-uri: "mongodb+srv://odl-reader:YOUR_PASSWORD@cluster1.mongodb.net/banking?retryWrites=true&w=majority"
-  cluster2-uri: "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster2.mongodb.net/analytics?retryWrites=true&w=majority"
+# MongoDB secrets are now managed centrally
+# Run './scripts/generate-mongodb-secrets.sh' to create the mongodb-secrets
+# The secret will be created with keys: cluster1-uri, cluster2-uri, mongo-password

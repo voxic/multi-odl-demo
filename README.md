@@ -190,53 +190,58 @@ microk8s enable dns storage ingress
 microk8s enable dashboard
 ```
 
-### 3. Configure MongoDB Atlas Secrets
-Update the connection strings in `k8s/microservices/aggregation-service-deployment.yaml`:
+### 3. Configure MongoDB Atlas Connection Strings
 
-```yaml
-stringData:
-  cluster1-uri: "mongodb+srv://odl-reader:YOUR_PASSWORD@cluster1.mongodb.net/banking?retryWrites=true&w=majority"
-  cluster2-uri: "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster2.mongodb.net/analytics?retryWrites=true&w=majority"
+The ODL demo now uses a centralized configuration approach for MongoDB Atlas connection strings. This simplifies management and ensures consistency across all components.
+
+#### Option 1: Interactive Configuration (Recommended)
+```bash
+# Run the interactive configuration script
+./scripts/configure-mongodb.sh
 ```
 
-### 4. Configure Kafka Connect Connectors
+This script will prompt you for:
+- Cluster 1 (Primary ODL) details: host, database, username, password
+- Cluster 2 (Analytics) details: host, database, username, password
 
-#### 4.1 Update Debezium MySQL Connector
-The MySQL connector is pre-configured in `k8s/connectors/debezium-mysql-connector.json` and should work with the default MySQL deployment. No changes needed unless you're using custom MySQL credentials.
+The script creates a local configuration file (`config/mongodb-config.local.env`) with your credentials.
 
-#### 4.2 Update MongoDB Atlas Connector
-Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`:
+#### Option 2: Manual Configuration
+Create `config/mongodb-config.local.env` manually with your MongoDB Atlas details:
 
-```json
-{
-  "name": "mongodb-atlas-connector",
-  "config": {
-    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
-    "tasks.max": "1",
-    "topics": "mysql.inventory.customers,mysql.inventory.accounts,mysql.inventory.transactions,mysql.inventory.agreements",
-    "connection.uri": "mongodb+srv://odl-writer:YOUR_PASSWORD@cluster1.mongodb.net/banking?retryWrites=true&w=majority",
-    "database": "banking",
-    "collection": "customers",
-    "document.id.strategy": "com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy",
-    "document.id.strategy.partial.value.projection.list": "customer_id",
-    "document.id.strategy.partial.value.projection.type": "AllowList",
-    "writemodel.strategy": "com.mongodb.kafka.connect.sink.writemodel.strategy.ReplaceOneBusinessKeyStrategy",
-    "writemodel.strategy.replace.one.filter.field.name": "customer_id",
-    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "key.converter.schemas.enable": "false",
-    "value.converter.schemas.enable": "false",
-    "transforms": "route",
-    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
-    "transforms.route.regex": "mysql.inventory.(.*)",
-    "transforms.route.replacement": "$1"
-  }
-}
+```bash
+# Create config directory
+mkdir -p config
+
+# Create configuration file
+cat > config/mongodb-config.local.env << EOF
+# MongoDB Atlas Cluster 1 (Primary ODL) - Banking Data
+MONGO_CLUSTER1_HOST=cluster1.mongodb.net
+MONGO_CLUSTER1_DATABASE=banking
+MONGO_CLUSTER1_USERNAME=odl-reader
+MONGO_CLUSTER1_PASSWORD=your_password_here
+
+# MongoDB Atlas Cluster 2 (Analytics) - Analytics Data  
+MONGO_CLUSTER2_HOST=cluster2.mongodb.net
+MONGO_CLUSTER2_DATABASE=analytics
+MONGO_CLUSTER2_USERNAME=odl-writer
+MONGO_CLUSTER2_PASSWORD=your_password_here
+
+# Connection Options
+MONGO_CONNECTION_OPTIONS=retryWrites=true&w=majority
+
+# Generated Connection Strings (DO NOT EDIT)
+MONGO_CLUSTER1_URI=mongodb+srv://\${MONGO_CLUSTER1_USERNAME}:\${MONGO_CLUSTER1_PASSWORD}@\${MONGO_CLUSTER1_HOST}/\${MONGO_CLUSTER1_DATABASE}?\${MONGO_CONNECTION_OPTIONS}
+MONGO_CLUSTER2_URI=mongodb+srv://\${MONGO_CLUSTER2_USERNAME}:\${MONGO_CLUSTER2_PASSWORD}@\${MONGO_CLUSTER2_HOST}/\${MONGO_CLUSTER2_DATABASE}?\${MONGO_CONNECTION_OPTIONS}
+
+# Kafka Connect MongoDB Connector Password
+MONGO_PASSWORD=\${MONGO_CLUSTER2_PASSWORD}
+EOF
 ```
 
-**Important**: Replace `YOUR_PASSWORD` with your actual MongoDB Atlas password for the `odl-writer` user.
+**Important**: Replace `your_password_here` with your actual MongoDB Atlas passwords.
 
-### 5. Deploy Everything
+### 4. Generate Kubernetes Secrets
 
 #### Option 1: Host Networking (Recommended for Demos)
 ```bash
@@ -262,6 +267,11 @@ Update the MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-conn
 **Benefits**: Works with any Kubernetes setup, uses standard ports via port forwarding.
 
 **Note**: The deployment script automatically handles Kafka Connect connector deployment after Kafka Connect is ready. You don't need to manually deploy the connectors.
+
+**Important**: All deployment scripts now automatically:
+1. Check for MongoDB configuration (`config/mongodb-config.local.env`)
+2. Generate Kubernetes secrets from your configuration
+3. Deploy all components with proper MongoDB connectivity
 
 ### Choosing the Right Deployment Option
 

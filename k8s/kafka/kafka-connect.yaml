@@ -79,6 +79,11 @@ spec:
           value: "connect-offsets"
         - name: STATUS_STORAGE_TOPIC
           value: "connect-status"
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: mongo-password
         - name: CONFIG_STORAGE_REPLICATION_FACTOR
           value: "1"
         - name: OFFSET_STORAGE_REPLICATION_FACTOR
