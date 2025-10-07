@@ -249,9 +249,10 @@ EOF
 ```
 **Benefits**: 
 - Single command deploys entire infrastructure including UIs
-- Direct access to standard ports (3306, 8080, 3001, 3002) with no port forwarding needed
-- UIs are built inside Kubernetes using ConfigMaps (no Docker image building required)
-- Legacy Banking UI: http://YOUR_VM_IP:3001
+- **AUTOMATIC**: Builds Docker images for all microservices
+- **AUTOMATIC**: Uses proper containerization instead of ConfigMaps
+- Direct access to standard ports (3306, 8080, 3002, 3003) with no port forwarding needed
+- Legacy Banking UI: http://YOUR_VM_IP:3003
 - Analytics UI: http://YOUR_VM_IP:3002
 
 #### Option 2: Standard Kubernetes Networking

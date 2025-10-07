@@ -71,12 +71,10 @@ REQUIRED_FILES=(
     "k8s/mysql/mysql-init-scripts.yaml"
     "k8s/kafka/kafka-hostnetwork.yaml"
     "k8s/kafka/kafka-connect-hostnetwork.yaml"
-    "k8s/microservices/aggregation-service-deployment.yaml"
-    "k8s/microservices/aggregation-source-configmap.yaml"
-    "k8s/microservices/customer-profile-service-deployment.yaml"
-    "k8s/microservices/customer-profile-source-configmap.yaml"
-    "k8s/microservices/legacy-ui-deployment.yaml"
-    "k8s/microservices/analytics-ui-deployment.yaml"
+    "k8s/microservices/aggregation-service-deployment-docker.yaml"
+    "k8s/microservices/customer-profile-service-deployment-docker.yaml"
+    "k8s/microservices/legacy-ui-deployment-docker.yaml"
+    "k8s/microservices/analytics-ui-deployment-docker.yaml"
     "k8s/connectors/debezium-mysql-connector-hostnetwork.json"
     "k8s/connectors/mongodb-atlas-connector.json"
 )
@@ -89,6 +87,13 @@ for file in "${REQUIRED_FILES[@]}"; do
 done
 
 print_status "All required files found"
+
+# Build microservices Docker images
+print_status "Building microservices Docker images..."
+if ! ./scripts/build-microservices.sh; then
+    print_error "Failed to build microservices Docker images"
+    exit 1
+fi
 
 # Create namespace
 print_status "Creating namespace 'odl-demo'..."
@@ -151,13 +156,12 @@ if ! kubectl run mysql-client --image=mysql:8.0 --rm -i --restart=Never -n odl-d
     print_warning "Failed to generate sample data (this may be expected if data already exists)"
 fi
 
-# Create configmaps with source code
-print_status "Creating source code configmaps..."
-kubectl apply -f k8s/microservices/aggregation-source-configmap.yaml -n odl-demo
-kubectl apply -f k8s/microservices/customer-profile-source-configmap.yaml -n odl-demo
+# Deploy microservices using Docker images
+print_status "Deploying microservices using Docker images..."
 
+# Deploy aggregation service
 print_status "Deploying aggregation service..."
-kubectl apply -f k8s/microservices/aggregation-service-deployment.yaml -n odl-demo
+kubectl apply -f k8s/microservices/aggregation-service-deployment-docker.yaml -n odl-demo
 
 # Wait for aggregation service to be ready
 print_status "Waiting for aggregation service to be ready..."
@@ -172,7 +176,7 @@ fi
 
 # Deploy Customer Profile service
 print_status "Deploying Customer Profile service..."
-kubectl apply -f k8s/microservices/customer-profile-service-deployment.yaml -n odl-demo
+kubectl apply -f k8s/microservices/customer-profile-service-deployment-docker.yaml -n odl-demo
 
 # Wait for Customer Profile service to be ready
 print_status "Waiting for Customer Profile service to be ready..."
@@ -182,6 +186,36 @@ if ! kubectl wait --for=condition=available --timeout=300s deployment/customer-p
     kubectl get pods -n odl-demo -l app=customer-profile-service
     print_status "Customer Profile service pod logs:"
     kubectl logs -n odl-demo -l app=customer-profile-service --tail=50
+    exit 1
+fi
+
+# Deploy Legacy Banking UI
+print_status "Deploying Legacy Banking UI..."
+kubectl apply -f k8s/microservices/legacy-ui-deployment-docker.yaml -n odl-demo
+
+# Wait for legacy UI to be ready
+print_status "Waiting for legacy UI to be ready..."
+if ! kubectl wait --for=condition=available --timeout=300s deployment/legacy-ui -n odl-demo; then
+    print_error "Legacy UI deployment failed to become available"
+    print_status "Legacy UI pod status:"
+    kubectl get pods -n odl-demo -l app=legacy-ui
+    print_status "Legacy UI pod logs:"
+    kubectl logs -n odl-demo -l app=legacy-ui --tail=50
+    exit 1
+fi
+
+# Deploy Analytics UI
+print_status "Deploying Analytics UI..."
+kubectl apply -f k8s/microservices/analytics-ui-deployment-docker.yaml -n odl-demo
+
+# Wait for analytics UI to be ready
+print_status "Waiting for analytics UI to be ready..."
+if ! kubectl wait --for=condition=available --timeout=300s deployment/analytics-ui -n odl-demo; then
+    print_error "Analytics UI deployment failed to become available"
+    print_status "Analytics UI pod status:"
+    kubectl get pods -n odl-demo -l app=analytics-ui
+    print_status "Analytics UI pod logs:"
+    kubectl logs -n odl-demo -l app=analytics-ui --tail=50
     exit 1
 fi
 
@@ -252,67 +286,6 @@ kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: ap
 # Clean up temporary file
 rm -f "$TEMP_CONNECTOR_FILE"
 
-# Deploy Legacy Banking UI
-print_status "Deploying Legacy Banking UI..."
-if [ -f "microservices/legacy-ui/package.json" ]; then
-    # Create ConfigMap for legacy UI source code
-    print_status "Creating ConfigMap for legacy UI source code..."
-    kubectl create configmap legacy-ui-source \
-      --from-file=package.json=microservices/legacy-ui/package.json \
-      --from-file=server.js=microservices/legacy-ui/server.js \
-      --from-file=index.html=microservices/legacy-ui/public/index.html \
-      --from-file=script.js=microservices/legacy-ui/public/script.js \
-      --from-file=styles.css=microservices/legacy-ui/public/styles.css \
-      -n odl-demo \
-      --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Deploy legacy UI
-    kubectl apply -f k8s/microservices/legacy-ui-deployment.yaml -n odl-demo
-    
-    # Wait for legacy UI to be ready
-    print_status "Waiting for legacy UI to be ready..."
-    if ! kubectl wait --for=condition=available --timeout=300s deployment/legacy-ui -n odl-demo; then
-        print_error "Legacy UI deployment failed to become available"
-        print_status "Legacy UI pod status:"
-        kubectl get pods -n odl-demo -l app=legacy-ui
-        print_status "Legacy UI pod logs:"
-        kubectl logs -n odl-demo -l app=legacy-ui --tail=50
-        exit 1
-    fi
-else
-    print_warning "Legacy UI not found, skipping deployment"
-fi
-
-# Deploy Analytics UI
-print_status "Deploying Analytics UI..."
-if [ -f "microservices/analytics-ui/package.json" ]; then
-    # Create ConfigMap for analytics UI source code
-    print_status "Creating ConfigMap for analytics UI source code..."
-    kubectl create configmap analytics-ui-source \
-      --from-file=package.json=microservices/analytics-ui/package.json \
-      --from-file=server.js=microservices/analytics-ui/server.js \
-      --from-file=index.html=microservices/analytics-ui/public/index.html \
-      --from-file=script.js=microservices/analytics-ui/public/script.js \
-      --from-file=styles.css=microservices/analytics-ui/public/styles.css \
-      -n odl-demo \
-      --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Deploy analytics UI
-    kubectl apply -f k8s/microservices/analytics-ui-deployment.yaml -n odl-demo
-    
-    # Wait for analytics UI to be ready
-    print_status "Waiting for analytics UI to be ready..."
-    if ! kubectl wait --for=condition=available --timeout=300s deployment/analytics-ui -n odl-demo; then
-        print_error "Analytics UI deployment failed to become available"
-        print_status "Analytics UI pod status:"
-        kubectl get pods -n odl-demo -l app=analytics-ui
-        print_status "Analytics UI pod logs:"
-        kubectl logs -n odl-demo -l app=analytics-ui --tail=50
-        exit 1
-    fi
-else
-    print_warning "Analytics UI not found, skipping deployment"
-fi
 
 print_status "🎉 Deployment completed successfully!"
 
@@ -332,14 +305,14 @@ if [ -n "$VM_IP" ]; then
     echo "[$(get_timestamp)] Kafka UI: http://$VM_IP:8080"
     echo "[$(get_timestamp)] Kafka: $VM_IP:9092"
     echo "[$(get_timestamp)] Kafka Connect: http://$VM_IP:8083"
-    echo "[$(get_timestamp)] Legacy Banking UI: http://$VM_IP:3001"
+    echo "[$(get_timestamp)] Legacy Banking UI: http://$VM_IP:3003"
     echo "[$(get_timestamp)] Analytics UI: http://$VM_IP:3002"
 else
     echo "[$(get_timestamp)] MySQL: mysql://odl_user:odl_password@localhost:3306/banking"
     echo "[$(get_timestamp)] Kafka UI: http://localhost:8080"
     echo "[$(get_timestamp)] Kafka: localhost:9092"
     echo "[$(get_timestamp)] Kafka Connect: http://localhost:8083"
-    echo "[$(get_timestamp)] Legacy Banking UI: http://localhost:3001"
+    echo "[$(get_timestamp)] Legacy Banking UI: http://localhost:3003"
     echo "[$(get_timestamp)] Analytics UI: http://localhost:3002"
 fi
 
