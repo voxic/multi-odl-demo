@@ -23,6 +23,7 @@
 - [ ] Clone repository to VM
 - [ ] Install Python dependencies: `pip install -r requirements.txt`
 - [ ] Update MongoDB connection strings in `k8s/microservices/aggregation-service-deployment.yaml`
+- [ ] Update MongoDB connection strings in `k8s/microservices/customer-profile-service-deployment.yaml`
 - [ ] Update MongoDB Atlas connection string in `k8s/connectors/mongodb-atlas-connector.json`
 - [ ] Replace `YOUR_PASSWORD` with actual `odl-writer` password in connector config
 - [ ] Make deployment scripts executable: `chmod +x scripts/*.sh`
@@ -60,7 +61,8 @@
 
 ### 4. Verify Data Flow
 - [ ] Check data appears in MongoDB Atlas Cluster 1 (customers collection)
-- [ ] Check aggregated data appears in MongoDB Atlas Cluster 2 (analytics collection)
+- [ ] Check aggregated analytics appear in MongoDB Atlas Cluster 2 (`analytics.customer_analytics`)
+- [ ] Check customer profiles appear in MongoDB Atlas Cluster 2 (`analytics.customer_profile`)
 - [ ] Test real-time updates by modifying data in MySQL
 - [ ] Verify change streams are working by watching aggregation service logs
 
@@ -69,6 +71,7 @@
 ### 1. Health Checks
 - [ ] All pods are running: `kubectl get pods -n odl-demo`
 - [ ] Aggregation service health: `curl http://localhost:3000/health`
+- [ ] Customer profile service health: `curl http://localhost:3001/health`
 - [ ] System statistics: `curl http://localhost:3000/stats`
 - [ ] Legacy UI accessible: `curl http://YOUR_VM_IP:3001/health`
 - [ ] Analytics UI accessible: `curl http://YOUR_VM_IP:3002/api/health`
@@ -82,7 +85,8 @@
 ### 3. Real-time Updates
 - [ ] Update customer record in MySQL
 - [ ] Verify change streams trigger aggregation
-- [ ] Check updated analytics in Atlas Cluster 2
+- [ ] Check updated analytics in Atlas Cluster 2 (`analytics.customer_analytics`)
+- [ ] Check updated profile in Atlas Cluster 2 (`analytics.customer_profile`)
 
 ## Demo Preparation
 
@@ -201,6 +205,7 @@
 - [ ] View MySQL logs: `kubectl logs -n odl-demo deployment/mysql --tail=50`
 - [ ] View Kafka Connect logs: `kubectl logs -n odl-demo deployment/kafka-connect --tail=50`
 - [ ] View aggregation service logs: `kubectl logs -n odl-demo deployment/aggregation-service --tail=50`
+- [ ] View customer profile service logs: `kubectl logs -n odl-demo deployment/customer-profile-service --tail=50`
 - [ ] View Legacy UI logs: `kubectl logs -n odl-demo deployment/legacy-ui --tail=50`
 - [ ] View Analytics UI logs: `kubectl logs -n odl-demo deployment/analytics-ui --tail=50`
 - [ ] Check UI ConfigMaps: `kubectl get configmaps -n odl-demo | grep ui`

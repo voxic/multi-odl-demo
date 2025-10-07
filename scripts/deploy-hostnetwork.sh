@@ -52,6 +52,7 @@ REQUIRED_FILES=(
     "k8s/kafka/kafka-hostnetwork.yaml"
     "k8s/kafka/kafka-connect-hostnetwork.yaml"
     "k8s/microservices/aggregation-service-deployment.yaml"
+    "k8s/microservices/customer-profile-service-deployment.yaml"
     "k8s/microservices/legacy-ui-deployment.yaml"
     "k8s/microservices/analytics-ui-deployment.yaml"
     "k8s/connectors/debezium-mysql-connector-hostnetwork.json"
@@ -146,6 +147,21 @@ if ! kubectl wait --for=condition=available --timeout=300s deployment/aggregatio
     kubectl get pods -n odl-demo -l app=aggregation-service
     print_status "Aggregation service pod logs:"
     kubectl logs -n odl-demo -l app=aggregation-service --tail=50
+    exit 1
+fi
+
+# Deploy Customer Profile service
+print_status "Deploying Customer Profile service..."
+kubectl apply -f k8s/microservices/customer-profile-service-deployment.yaml -n odl-demo
+
+# Wait for Customer Profile service to be ready
+print_status "Waiting for Customer Profile service to be ready..."
+if ! kubectl wait --for=condition=available --timeout=300s deployment/customer-profile-service -n odl-demo; then
+    print_error "Customer Profile service deployment failed to become available"
+    print_status "Customer Profile service pod status:"
+    kubectl get pods -n odl-demo -l app=customer-profile-service
+    print_status "Customer Profile service pod logs:"
+    kubectl logs -n odl-demo -l app=customer-profile-service --tail=50
     exit 1
 fi
 
@@ -272,6 +288,7 @@ fi
 echo ""
 print_status "Port Forwarding (for other services):"
 echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
+echo "[$(get_timestamp)] Customer Profile Service: kubectl port-forward service/customer-profile-service 3001:3001 -n odl-demo"
 
 echo ""
 print_status "To check the status of all pods:"
@@ -280,3 +297,4 @@ echo "[$(get_timestamp)] kubectl get pods -n odl-demo"
 echo ""
 print_status "To view logs:"
 echo "[$(get_timestamp)] kubectl logs -f deployment/aggregation-service -n odl-demo"
+echo "[$(get_timestamp)] kubectl logs -f deployment/customer-profile-service -n odl-demo"

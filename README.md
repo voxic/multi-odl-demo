@@ -781,6 +781,42 @@ kubectl logs -f deployment/aggregation-service -n odl-demo
 - `GET /connectors/{name}/status` - Connector status
 - `POST /connectors` - Create connector
 
+### Customer Profile Service
+- `GET /health` - Health check
+- `POST /profile` - Build customer profiles
+  - Body: `{ "customerId": 123 }` (optional; omit to rebuild all)
+- `GET /customers/:id` - Fetch a customer's profile document from `analytics.customer_profile`
+
+## Customer Profile Service - Configuration and Deployment
+
+### Configure Secrets
+Update the MongoDB connection strings in `k8s/microservices/customer-profile-service-deployment.yaml` under the `mongodb-secrets` section, identical to the aggregation service.
+
+### Deploy (included in scripts)
+- Host networking script automatically deploys the service:
+  ```bash
+  ./scripts/deploy-hostnetwork.sh
+  ```
+- Standard deployment: apply the manifest and port-forward if needed:
+  ```bash
+  kubectl apply -f k8s/microservices/customer-profile-service-deployment.yaml -n odl-demo
+  kubectl wait --for=condition=available --timeout=300s deployment/customer-profile-service -n odl-demo
+  kubectl port-forward service/customer-profile-service 3001:3001 -n odl-demo
+  ```
+
+### Verify
+```bash
+curl http://localhost:3001/health
+curl -X POST http://localhost:3001/profile            # rebuild all
+curl -X POST http://localhost:3001/profile -H 'Content-Type: application/json' \
+  -d '{"customerId": 1}'                              # rebuild one
+curl http://localhost:3001/customers/1                 # fetch profile doc
+```
+
+### Notes
+- The service maintains `analytics.customer_profile` with a `profile` section and an `accounts` array with the 10 most recent transactions per account.
+- Change streams on `customers`, `accounts`, and `transactions` in Cluster 1 keep documents up-to-date.
+
 ## Monitoring
 
 ### Health Checks
