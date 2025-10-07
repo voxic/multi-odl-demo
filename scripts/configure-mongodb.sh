@@ -131,6 +131,7 @@ awk -v cluster1_uri="$cluster1_uri" -v cluster2_uri="$cluster2_uri" -v password=
 /MONGO_CLUSTER1_URI=/ { print "MONGO_CLUSTER1_URI=" cluster1_uri; next }
 /MONGO_CLUSTER2_URI=/ { print "MONGO_CLUSTER2_URI=" cluster2_uri; next }
 /MONGO_PASSWORD=/ { print "MONGO_PASSWORD=" password; next }
+/MONGO_CONNECTION_OPTIONS=/ { next }  # Skip this line as it causes parsing issues
 { print }
 ' "$LOCAL_CONFIG_FILE" > "$LOCAL_CONFIG_FILE.tmp" && mv "$LOCAL_CONFIG_FILE.tmp" "$LOCAL_CONFIG_FILE"
 

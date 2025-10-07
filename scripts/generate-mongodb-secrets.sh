@@ -40,9 +40,21 @@ if [ ! -f "$LOCAL_CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Source the configuration
+# Load the configuration using eval to avoid shell parsing issues with & characters
 print_status "Loading MongoDB configuration from $LOCAL_CONFIG_FILE"
-source "$LOCAL_CONFIG_FILE"
+
+# Read the configuration file and extract variables safely
+while IFS='=' read -r key value; do
+    # Skip comments and empty lines
+    if [[ $key =~ ^[[:space:]]*# ]] || [[ -z $key ]]; then
+        continue
+    fi
+    # Remove leading/trailing whitespace
+    key=$(echo "$key" | xargs)
+    value=$(echo "$value" | xargs)
+    # Export the variable
+    export "$key"="$value"
+done < "$LOCAL_CONFIG_FILE"
 
 # Validate required variables
 required_vars=("MONGO_CLUSTER1_URI" "MONGO_CLUSTER2_URI" "MONGO_PASSWORD")
