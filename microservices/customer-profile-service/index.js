@@ -110,6 +110,26 @@ function safeBase64Number(value, defaultValue = 0) {
   return isNaN(num) ? defaultValue : num;
 }
 
+// Helper function to safely get currency amounts (stored in cents, convert to dollars)
+function safeCurrencyAmount(value, defaultValue = 0) {
+  if (value === null || value === undefined) return defaultValue;
+  
+  // Handle NumberLong objects
+  if (typeof value === 'object' && value.$numberLong) {
+    return parseInt(value.$numberLong) / 100; // Convert cents to dollars
+  }
+  
+  // Handle base64 encoded values (stored as cents)
+  if (typeof value === 'string') {
+    const decoded = decodeBase64Field(value);
+    const num = parseFloat(decoded);
+    return isNaN(num) ? defaultValue : num / 100; // Convert cents to dollars
+  }
+  
+  const num = parseFloat(value);
+  return isNaN(num) ? defaultValue : num / 100; // Convert cents to dollars
+}
+
 function safeString(value, defaultValue = '') {
   if (value === null || value === undefined) return defaultValue;
   if (typeof value === 'string') return value;
@@ -205,7 +225,7 @@ async function buildCustomerProfile(customerId) {
           // Debug logging for account data
           logger.info(`Account ${accountId} raw data:`, JSON.stringify(account, null, 2));
           logger.info(`Account ${accountId} balance raw:`, account.balance);
-          logger.info(`Account ${accountId} balance decoded:`, safeBase64Number(account.balance));
+          logger.info(`Account ${accountId} balance decoded:`, safeCurrencyAmount(account.balance));
           accountsMap.set(accountId, account);
         }
       }
@@ -243,11 +263,11 @@ async function buildCustomerProfile(customerId) {
           if (!transactionsMap.has(transactionId)) {
             // Debug logging for transaction amounts
             logger.info(`Transaction ${transactionId} amount raw:`, transaction.amount);
-            logger.info(`Transaction ${transactionId} amount decoded:`, safeBase64Number(transaction.amount));
+            logger.info(`Transaction ${transactionId} amount decoded:`, safeCurrencyAmount(transaction.amount));
             transactionsMap.set(transactionId, {
               transaction_id: transactionId,
               transaction_date: safeDate(transaction.transaction_date),
-              amount: safeBase64Number(transaction.amount),
+              amount: safeCurrencyAmount(transaction.amount),
               type: safeString(transaction.transaction_type),
               description: safeString(transaction.description)
             });
@@ -259,7 +279,7 @@ async function buildCustomerProfile(customerId) {
       accountOverviews.push({
         account_id: safeBase64Number(account.account_id),
         account_type: safeString(account.account_type),
-        balance: safeBase64Number(account.balance),
+        balance: safeCurrencyAmount(account.balance),
         currency: safeString(account.currency, 'USD'),
         transactions
       });
