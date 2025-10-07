@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BankUI - Modern Banking Experience</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <i class="fas fa-university"></i>
+                        <h1>BankUI</h1>
+                    </div>
+                    <div class="header-actions">
+                        <button class="refresh-btn" onclick="loadRandomCustomer()">
+                            <i class="fas fa-sync-alt"></i>
+                            New Customer
+                        </button>
+                        <div class="status-indicator" id="statusIndicator">
+                            <div class="status-dot"></div>
+                            <span>Live</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <div class="container">
+                <!-- Hero Section -->
+                <div class="hero-section">
+                    <div class="hero-content">
+                        <h2 class="hero-title">Welcome to BankUI</h2>
+                        <p class="hero-subtitle">Experience modern banking with real-time customer insights</p>
+                        <div class="hero-stats">
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <div class="stat-value" id="totalCustomers">-</div>
+                                    <div class="stat-label">Active Customers</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <div class="stat-value" id="systemStatus">-</div>
+                                    <div class="stat-label">System Status</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customer Profile Section -->
+                <div class="customer-section">
+                    <div class="section-header">
+                        <h3>Featured Customer Profile</h3>
+                        <p>Real-time customer data from our MongoDB database</p>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p>Loading customer profile...</p>
+                    </div>
+
+                    <!-- Error State -->
+                    <div class="error" id="error" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p id="errorMessage">Failed to load customer profile</p>
+                        <button onclick="loadRandomCustomer()" class="retry-btn">Try Again</button>
+                    </div>
+
+                    <!-- Customer Profile Card -->
+                    <div class="customer-profile" id="customerProfile" style="display: none;">
+                        <!-- Customer profile content will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Features Section -->
+                <div class="features-section">
+                    <h3>BankUI Features</h3>
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <h4>Real-time Data</h4>
+                            <p>Live customer profiles updated from MongoDB with CDC streaming</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <h4>Secure Banking</h4>
+                            <p>Enterprise-grade security with encrypted data transmission</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-mobile-alt"></i>
+                            </div>
+                            <h4>Modern Interface</h4>
+                            <p>Sleek, responsive design optimized for all devices</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <h4>Microservices</h4>
+                            <p>Scalable architecture with independent service components</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="container">
+                <div class="footer-content">
+                    <div class="footer-left">
+                        <div class="logo">
+                            <i class="fas fa-university"></i>
+                            <span>BankUI</span>
+                        </div>
+                        <p>Modern banking experience powered by MongoDB and microservices</p>
+                    </div>
+                    <div class="footer-right">
+                        <div class="footer-links">
+                            <a href="#privacy">Privacy Policy</a>
+                            <a href="#terms">Terms of Service</a>
+                            <a href="#contact">Contact</a>
+                        </div>
+                        <div class="footer-tech">
+                            <span>Powered by MongoDB Atlas & Kubernetes</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

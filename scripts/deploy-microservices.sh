@@ -43,6 +43,7 @@ REQUIRED_FILES=(
     "k8s/microservices/customer-profile-service-deployment-docker.yaml"
     "k8s/microservices/analytics-ui-deployment-docker.yaml"
     "k8s/microservices/legacy-ui-deployment-docker.yaml"
+    "k8s/microservices/bankui-landing-deployment-docker.yaml"
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
@@ -82,10 +83,14 @@ kubectl apply -f k8s/microservices/analytics-ui-deployment-docker.yaml -n odl-de
 print_status "Deploying legacy UI..."
 kubectl apply -f k8s/microservices/legacy-ui-deployment-docker.yaml -n odl-demo
 
+# Deploy BankUI landing page
+print_status "Deploying BankUI landing page..."
+kubectl apply -f k8s/microservices/bankui-landing-deployment-docker.yaml -n odl-demo
+
 # Wait for deployments to be ready
 print_status "Waiting for deployments to be ready..."
 
-services=("aggregation-service" "customer-profile-service" "analytics-ui" "legacy-ui")
+services=("aggregation-service" "customer-profile-service" "analytics-ui" "legacy-ui" "bankui-landing")
 
 for service in "${services[@]}"; do
     print_status "Waiting for $service..."
@@ -105,16 +110,17 @@ done
 print_success "All microservices deployed successfully!"
 echo ""
 echo "📊 Service Status:"
-kubectl get pods -n odl-demo -l 'app in (aggregation-service,customer-profile-service,analytics-ui,legacy-ui)'
+kubectl get pods -n odl-demo -l 'app in (aggregation-service,customer-profile-service,analytics-ui,legacy-ui,bankui-landing)'
 echo ""
 echo "🌐 Services:"
-kubectl get services -n odl-demo -l 'app in (aggregation-service,customer-profile-service,analytics-ui,legacy-ui)'
+kubectl get services -n odl-demo -l 'app in (aggregation-service,customer-profile-service,analytics-ui,legacy-ui,bankui-landing)'
 echo ""
 echo "🔧 To check logs:"
 echo "   kubectl logs -f deployment/aggregation-service -n odl-demo"
 echo "   kubectl logs -f deployment/customer-profile-service -n odl-demo"
 echo "   kubectl logs -f deployment/analytics-ui -n odl-demo"
 echo "   kubectl logs -f deployment/legacy-ui -n odl-demo"
+echo "   kubectl logs -f deployment/bankui-landing -n odl-demo"
 echo ""
 echo "🔄 To update services:"
 echo "   1. ./scripts/build-microservices.sh"

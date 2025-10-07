@@ -77,6 +77,12 @@ cd ../legacy-ui
 docker build -t legacy-ui:latest .
 print_success "Legacy UI image built"
 
+# Build BankUI landing page
+print_status "Building BankUI landing page..."
+cd ../bankui-landing
+docker build -t bankui-landing:latest .
+print_success "BankUI landing page image built"
+
 # Go back to project root
 cd "$PROJECT_ROOT"
 
@@ -104,6 +110,10 @@ if command -v microk8s &> /dev/null; then
     print_status "Saving legacy UI image..."
     docker save legacy-ui:latest > "$TEMP_DIR/legacy-ui.tar"
     microk8s ctr images import "$TEMP_DIR/legacy-ui.tar"
+    
+    print_status "Saving BankUI landing page image..."
+    docker save bankui-landing:latest > "$TEMP_DIR/bankui-landing.tar"
+    microk8s ctr images import "$TEMP_DIR/bankui-landing.tar"
     
     print_success "Images loaded into MicroK8s"
 else
