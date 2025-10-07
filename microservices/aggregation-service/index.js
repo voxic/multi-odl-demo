@@ -186,17 +186,21 @@ async function aggregateCustomerData(customerId) {
     const db2 = cluster2Client.db('analytics');
     
     // Get customer data - handle both CDC events and regular documents
+    // Sort by timestamp to get the latest CDC event
     const customerCDC = await db1.collection('customers').findOne({ 
       $or: [
         // CDC event format
         { 'after.customer_id': Long.fromString(customerId.toString()) },
         { 'after.customer_id': customerId },
-        { 'after.customer_id': { $numberLong: customerId.toString() } },
         // Regular document format
         { 'customer_id': Long.fromString(customerId.toString()) },
-        { 'customer_id': customerId },
-        { 'customer_id': { $numberLong: customerId.toString() } }
+        { 'customer_id': customerId }
       ]
+    }, { 
+      sort: { 
+        'ts_ms': -1,  // Sort by timestamp descending to get latest
+        '_id': -1     // Secondary sort by _id for consistency
+      } 
     });
     
     if (!customerCDC) {
@@ -211,6 +215,8 @@ async function aggregateCustomerData(customerId) {
     }
     
     logger.info(`Processing customer ${customerId}: ${safeString(customer.first_name)} ${safeString(customer.last_name)}`);
+    logger.info(`Customer status from CDC: ${safeString(customer.customer_status)}`);
+    logger.info(`Customer CDC timestamp: ${customerCDC.ts_ms || 'N/A'}`);
     
     // Get customer accounts - handle both CDC events and regular documents
     const accountsCDC = await db1.collection('accounts').find({ 
@@ -218,11 +224,9 @@ async function aggregateCustomerData(customerId) {
         // CDC event format
         { 'after.customer_id': Long.fromString(customerId.toString()) },
         { 'after.customer_id': customerId },
-        { 'after.customer_id': { $numberLong: customerId.toString() } },
         // Regular document format
         { 'customer_id': Long.fromString(customerId.toString()) },
-        { 'customer_id': customerId },
-        { 'customer_id': { $numberLong: customerId.toString() } }
+        { 'customer_id': customerId }
       ]
     }).toArray();
     
@@ -234,11 +238,9 @@ async function aggregateCustomerData(customerId) {
         // CDC event format
         { 'after.customer_id': Long.fromString(customerId.toString()) },
         { 'after.customer_id': customerId },
-        { 'after.customer_id': { $numberLong: customerId.toString() } },
         // Regular document format
         { 'customer_id': Long.fromString(customerId.toString()) },
-        { 'customer_id': customerId },
-        { 'customer_id': { $numberLong: customerId.toString() } }
+        { 'customer_id': customerId }
       ]
     }).toArray();
     
@@ -256,11 +258,9 @@ async function aggregateCustomerData(customerId) {
             // CDC event format
             { 'after.account_id': { $in: accountIds } },
             { 'after.account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } },
-            { 'after.account_id': { $in: accountIds.map(id => ({ $numberLong: id.toString() })) } },
             // Regular document format
             { 'account_id': { $in: accountIds } },
-            { 'account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } },
-            { 'account_id': { $in: accountIds.map(id => ({ $numberLong: id.toString() })) } }
+            { 'account_id': { $in: accountIds.map(id => Long.fromString(id.toString())) } }
           ]
         },
         {
@@ -416,20 +416,50 @@ async function setupChangeStreams() {
     // Watch for changes in customers collection
     const customersStream = db1.collection('customers').watch([], { fullDocument: 'updateLookup' });
     customersStream.on('change', async (change) => {
-      logger.info('Customer change detected:', change.operationType);
-      logger.info('Change document:', JSON.stringify(change, null, 2));
+      logger.info('=== CUSTOMER CHANGE STREAM EVENT ===');
+      logger.info('Operation Type:', change.operationType);
+      logger.info('Full Change Document:', JSON.stringify(change, null, 2));
+      
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        // For MongoDB change streams, the data is directly in fullDocument
-        const customer = change.fullDocument;
-        logger.info('Customer data from change stream:', JSON.stringify(customer, null, 2));
+        logger.info('Processing insert/update event...');
+        
+        // Log the full document structure
+        logger.info('Full Document:', JSON.stringify(change.fullDocument, null, 2));
+        
+        // Try different extraction methods
+        let customer = null;
+        
+        // Method 1: Direct extraction
+        if (change.fullDocument && change.fullDocument.after) {
+          customer = change.fullDocument.after;
+          logger.info('Extracted via .after:', JSON.stringify(customer, null, 2));
+        }
+        
+        // Method 2: Use existing extractDataFromCDC function
+        if (!customer) {
+          customer = extractDataFromCDC(change.fullDocument);
+          logger.info('Extracted via extractDataFromCDC:', JSON.stringify(customer, null, 2));
+        }
+        
+        // Method 3: Direct fullDocument if it's not CDC format
+        if (!customer && change.fullDocument) {
+          customer = change.fullDocument;
+          logger.info('Using fullDocument directly:', JSON.stringify(customer, null, 2));
+        }
+        
         if (customer && customer.customer_id) {
           const customerId = safeNumber(customer.customer_id);
+          logger.info(`✅ Valid customer data found! Customer ID: ${customerId}`);
           logger.info(`Triggering aggregation for customer ${customerId} due to customer change`);
           await aggregateCustomerData(customerId);
         } else {
-          logger.warn('No valid customer data found in change event');
+          logger.warn('❌ No valid customer data found in change event');
+          logger.warn('Customer object:', JSON.stringify(customer, null, 2));
         }
+      } else {
+        logger.info(`Skipping ${change.operationType} operation`);
       }
+      logger.info('=== END CUSTOMER CHANGE STREAM EVENT ===');
     });
     
     // Watch for changes in accounts collection
