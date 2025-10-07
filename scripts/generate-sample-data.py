@@ -206,6 +206,46 @@ def chunked(items: Iterable[Any], chunk_size: int) -> Iterable[List[Any]]:
         yield chunk
 
 
+def get_enum_values(cursor, table_name: str, column_name: str) -> List[str]:
+    """Return the ENUM options for a given table.column, or empty list if not enum/unknown."""
+    try:
+        cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE %s", (column_name,))
+        row = cursor.fetchone()
+        if not row:
+            return []
+        # MySQL returns: Field, Type, Null, Key, Default, Extra
+        col_type = row[1]
+        if not col_type.lower().startswith('enum('):
+            return []
+        # enum('A','B','C') → [A,B,C]
+        inside = col_type[col_type.find('(')+1:col_type.rfind(')')]
+        parts = [p.strip().strip("'") for p in inside.split(',')]
+        return parts
+    except Error:
+        return []
+
+
+def normalize_enum_value(value: str, allowed: List[str], default_fallback: Optional[str] = None) -> str:
+    """Return a value present in allowed, mapping common variants when necessary."""
+    if not allowed:
+        return value
+    if value in allowed:
+        return value
+    # Common American/British spelling difference
+    if value == 'CANCELLED' and 'CANCELED' in allowed:
+        return 'CANCELED'
+    if value == 'CANCELED' and 'CANCELLED' in allowed:
+        return 'CANCELLED'
+    # Try case-insensitive match
+    lower_map = {a.lower(): a for a in allowed}
+    if value.lower() in lower_map:
+        return lower_map[value.lower()]
+    # Fallback to provided default or first allowed
+    if default_fallback and default_fallback in allowed:
+        return default_fallback
+    return allowed[0]
+
+
 def generate_customer(customer_id: int) -> Dict[str, Any]:
     """Generate a random customer record with unique email."""
     global FAKE
@@ -535,6 +575,11 @@ def generate_and_insert_data() -> None:
         """
         
         for batch in chunked(transactions, CONFIG['batch_size']):
+            # Normalize status values against live ENUM
+            allowed_status = get_enum_values(cursor, 'transactions', 'status')
+            if allowed_status:
+                for item in batch:
+                    item['status'] = normalize_enum_value(item['status'], allowed_status, default_fallback='COMPLETED')
             cursor.executemany(transaction_insert_query, batch)
         
         # Now generate agreements using the inserted accounts
@@ -563,6 +608,10 @@ def generate_and_insert_data() -> None:
         
         for batch in chunked(agreements, CONFIG['batch_size']):
             try:
+                allowed_status = get_enum_values(cursor, 'agreements', 'status')
+                if allowed_status:
+                    for item in batch:
+                        item['status'] = normalize_enum_value(item['status'], allowed_status, default_fallback='ACTIVE')
                 cursor.executemany(agreement_insert_query, batch)
             except Error as e:
                 if "Duplicate entry" in str(e):
