@@ -360,15 +360,42 @@ async function setupChangeStreams() {
 
     const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
     transactionsStream.on('change', async (change) => {
-      logger.info('Transaction change detected:', change.operationType);
-      logger.info('Transaction change document:', JSON.stringify(change, null, 2));
+      logger.info('=== TRANSACTION CHANGE STREAM EVENT (PROFILE SERVICE) ===');
+      logger.info('Operation Type:', change.operationType);
+      logger.info('Full Change Document:', JSON.stringify(change, null, 2));
+      
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        // For MongoDB change streams, the data is directly in fullDocument
-        const transaction = change.fullDocument;
-        logger.info('Transaction data from change stream:', JSON.stringify(transaction, null, 2));
+        logger.info('Processing insert/update event...');
+        
+        // Log the full document structure
+        logger.info('Full Document:', JSON.stringify(change.fullDocument, null, 2));
+        
+        // Try different extraction methods
+        let transaction = null;
+        
+        // Method 1: Direct extraction from fullDocument
+        if (change.fullDocument && change.fullDocument.after) {
+          transaction = change.fullDocument.after;
+          logger.info('Extracted via .after:', JSON.stringify(transaction, null, 2));
+        }
+        
+        // Method 2: Use existing extractDataFromCDC function
+        if (!transaction) {
+          transaction = extractDataFromCDC(change.fullDocument);
+          logger.info('Extracted via extractDataFromCDC:', JSON.stringify(transaction, null, 2));
+        }
+        
+        // Method 3: Direct fullDocument if it's not CDC format
+        if (!transaction && change.fullDocument) {
+          transaction = change.fullDocument;
+          logger.info('Using fullDocument directly:', JSON.stringify(transaction, null, 2));
+        }
+        
         if (transaction && transaction.account_id) {
-          // Find the account to get the customer_id - handle both CDC events and regular documents
           const accountId = safeBase64Number(transaction.account_id);
+          logger.info(`✅ Valid transaction data found! Account ID: ${accountId}`);
+          
+          // Find the account to get the customer_id - handle both CDC events and regular documents
           const account = await db1.collection('accounts').findOne({
             $or: [
               // CDC event format
@@ -389,16 +416,24 @@ async function setupChangeStreams() {
             const accountData = extractDataFromCDC(account);
             if (accountData && accountData.customer_id) {
               const customerId = safeBase64Number(accountData.customer_id);
+              logger.info(`✅ Found account ${accountId} for customer ${customerId}`);
               logger.info(`Triggering profile rebuild for customer ${customerId} due to transaction change`);
               await buildCustomerProfile(customerId);
             } else {
-              logger.warn(`Could not extract customer_id from account ${accountId}`);
+              logger.warn(`❌ Could not extract customer_id from account ${accountId}`);
+              logger.warn('Account data:', JSON.stringify(accountData, null, 2));
             }
           } else {
-            logger.warn(`Could not find account ${accountId} for transaction`);
+            logger.warn(`❌ Could not find account ${accountId} for transaction`);
           }
+        } else {
+          logger.warn('❌ No valid transaction data found in change event');
+          logger.warn('Transaction object:', JSON.stringify(transaction, null, 2));
         }
+      } else {
+        logger.info(`Skipping ${change.operationType} operation`);
       }
+      logger.info('=== END TRANSACTION CHANGE STREAM EVENT (PROFILE SERVICE) ===');
     });
   } catch (error) {
     logger.error('Error setting up change streams:', error);
