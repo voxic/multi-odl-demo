@@ -344,18 +344,50 @@ async function setupChangeStreams() {
 
     const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
     accountsStream.on('change', async (change) => {
-      logger.info('Account change detected:', change.operationType);
-      logger.info('Account change document:', JSON.stringify(change, null, 2));
+      logger.info('=== ACCOUNT CHANGE STREAM EVENT (PROFILE SERVICE) ===');
+      logger.info('Operation Type:', change.operationType);
+      logger.info('Full Change Document:', JSON.stringify(change, null, 2));
+      
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        // For MongoDB change streams, the data is directly in fullDocument
-        const account = change.fullDocument;
-        logger.info('Account data from change stream:', JSON.stringify(account, null, 2));
+        logger.info('Processing insert/update event...');
+        
+        // Log the full document structure
+        logger.info('Full Document:', JSON.stringify(change.fullDocument, null, 2));
+        
+        // Try different extraction methods
+        let account = null;
+        
+        // Method 1: Direct extraction from fullDocument
+        if (change.fullDocument && change.fullDocument.after) {
+          account = change.fullDocument.after;
+          logger.info('Extracted via .after:', JSON.stringify(account, null, 2));
+        }
+        
+        // Method 2: Use existing extractDataFromCDC function
+        if (!account) {
+          account = extractDataFromCDC(change.fullDocument);
+          logger.info('Extracted via extractDataFromCDC:', JSON.stringify(account, null, 2));
+        }
+        
+        // Method 3: Direct fullDocument if it's not CDC format
+        if (!account && change.fullDocument) {
+          account = change.fullDocument;
+          logger.info('Using fullDocument directly:', JSON.stringify(account, null, 2));
+        }
+        
         if (account && account.customer_id) {
           const customerId = safeBase64Number(account.customer_id);
+          logger.info(`✅ Valid account data found! Customer ID: ${customerId}`);
           logger.info(`Triggering profile rebuild for customer ${customerId} due to account change`);
           await buildCustomerProfile(customerId);
+        } else {
+          logger.warn('❌ No valid account data found in change event');
+          logger.warn('Account object:', JSON.stringify(account, null, 2));
         }
+      } else {
+        logger.info(`Skipping ${change.operationType} operation`);
       }
+      logger.info('=== END ACCOUNT CHANGE STREAM EVENT (PROFILE SERVICE) ===');
     });
 
     const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
