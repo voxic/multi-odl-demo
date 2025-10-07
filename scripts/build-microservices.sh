@@ -37,6 +37,12 @@ cd "$PROJECT_ROOT"
 
 print_status "Building microservices Docker images..."
 
+# Optional: Generate package-lock.json files for reproducible builds
+if [ "$1" = "--with-locks" ]; then
+    print_status "Generating package-lock.json files for reproducible builds..."
+    ./scripts/generate-package-locks.sh
+fi
+
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
     print_error "Docker is not running. Please start Docker and try again."

@@ -191,7 +191,22 @@ kubectl describe pod -l app=aggregation-service -n odl-demo
 docker images | grep -E "(aggregation|customer|analytics|legacy)"
 ```
 
-## Performance Comparison
+## Troubleshooting
+
+### Common Issues
+
+#### Docker Build Issues
+- [ ] **Error**: `npm ci command can only install with an existing package-lock.json`
+- [ ] **Solution**: Dockerfiles now use `npm install --omit=dev` instead of `npm ci`
+- [ ] **For Better Performance**: Generate package-lock.json files first:
+  ```bash
+  ./scripts/generate-package-locks.sh
+  ./scripts/build-microservices.sh --with-locks
+  ```
+- [ ] **Error**: `Docker is not running locally`
+- [ ] **Solution**: Start Docker service: `sudo systemctl start docker`
+
+#### Performance Comparison
 
 | Aspect | ConfigMap Approach | Docker Approach |
 |--------|-------------------|-----------------|
