@@ -66,8 +66,19 @@ function safeDate(value) {
 }
 
 function extractDataFromCDC(cdcEvent) {
-  if (!cdcEvent || !cdcEvent.after) return null;
-  return cdcEvent.after;
+  if (!cdcEvent) return null;
+  
+  // Handle actual CDC events from Debezium (with op, before, after structure)
+  if (cdcEvent.op && cdcEvent.after) {
+    return cdcEvent.after;
+  }
+  
+  // Handle legacy CDC events (direct after structure)
+  if (cdcEvent.after) {
+    return cdcEvent.after;
+  }
+  
+  return null;
 }
 
 async function buildCustomerProfile(customerId) {
@@ -177,19 +188,27 @@ async function setupChangeStreams() {
 
     const customersStream = db1.collection('customers').watch([], { fullDocument: 'updateLookup' });
     customersStream.on('change', async (change) => {
+      logger.info('Customer change detected:', change.operationType);
+      logger.info('Change document:', JSON.stringify(change, null, 2));
+      
       if (change.operationType === 'insert' || change.operationType === 'update') {
         const customer = extractDataFromCDC(change.fullDocument);
         if (customer && customer.customer_id) {
+          logger.info(`Triggering profile rebuild for customer ${safeNumber(customer.customer_id)}`);
           await buildCustomerProfile(safeNumber(customer.customer_id));
+        } else {
+          logger.warn('No valid customer data found in change event');
         }
       }
     });
 
     const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
     accountsStream.on('change', async (change) => {
+      logger.info('Account change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
         const account = extractDataFromCDC(change.fullDocument);
         if (account && account.customer_id) {
+          logger.info(`Triggering profile rebuild for customer ${safeNumber(account.customer_id)} due to account change`);
           await buildCustomerProfile(safeNumber(account.customer_id));
         }
       }
@@ -197,14 +216,19 @@ async function setupChangeStreams() {
 
     const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
     transactionsStream.on('change', async (change) => {
+      logger.info('Transaction change detected:', change.operationType);
       if (change.operationType === 'insert' || change.operationType === 'update') {
         const tx = extractDataFromCDC(change.fullDocument);
         if (tx && tx.account_id) {
           const accountCDC = await db1.collection('accounts').findOne({
-            'after.account_id': Long.fromString(safeNumber(tx.account_id).toString())
+            $or: [
+              { 'after.account_id': Long.fromString(safeNumber(tx.account_id).toString()) },
+              { 'after.account_id': safeNumber(tx.account_id) }
+            ]
           });
           const account = extractDataFromCDC(accountCDC);
           if (account && account.customer_id) {
+            logger.info(`Triggering profile rebuild for customer ${safeNumber(account.customer_id)} due to transaction change`);
             await buildCustomerProfile(safeNumber(account.customer_id));
           }
         }

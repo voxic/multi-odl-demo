@@ -150,8 +150,19 @@ function safeDate(value) {
 
 // Extract actual data from CDC event
 function extractDataFromCDC(cdcEvent) {
-  if (!cdcEvent || !cdcEvent.after) return null;
-  return cdcEvent.after;
+  if (!cdcEvent) return null;
+  
+  // Handle actual CDC events from Debezium (with op, before, after structure)
+  if (cdcEvent.op && cdcEvent.after) {
+    return cdcEvent.after;
+  }
+  
+  // Handle legacy CDC events (direct after structure)
+  if (cdcEvent.after) {
+    return cdcEvent.after;
+  }
+  
+  return null;
 }
 
 // Helper function to get customer ID from CDC data
@@ -410,7 +421,10 @@ async function setupChangeStreams() {
         if (transaction && transaction.account_id) {
           // Find the customer for this account
           const accountCDC = await db1.collection('accounts').findOne({ 
-            'after.account_id': Long.fromString(transaction.account_id.toString()) 
+            $or: [
+              { 'after.account_id': Long.fromString(transaction.account_id.toString()) },
+              { 'after.account_id': safeNumber(transaction.account_id) }
+            ]
           });
           if (accountCDC) {
             const account = extractDataFromCDC(accountCDC);
