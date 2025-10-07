@@ -28,7 +28,7 @@ spec:
         - name: PORT
           value: "3003"
         - name: CUSTOMER_PROFILE_SERVICE_URL
-          value: "http://localhost:3001"
+          value: "http://customer-profile-service:3001"
         resources:
           requests:
             memory: "256Mi"
