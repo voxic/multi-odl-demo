@@ -232,114 +232,114 @@ data:
   }
 }
 
-async function setupChangeStreams() {
-  try {
-    const db1 = cluster1Client.db('banking');
+    async function setupChangeStreams() {
+      try {
+        const db1 = cluster1Client.db('banking');
 
-    const customersStream = db1.collection('customers').watch([], { fullDocument: 'updateLookup' });
-    customersStream.on('change', async (change) => {
-      logger.info('Customer change detected:', change.operationType);
-      logger.info('Change document:', JSON.stringify(change, null, 2));
-      
-      if (change.operationType === 'insert' || change.operationType === 'update') {
-        const customer = extractDataFromCDC(change.fullDocument);
-        if (customer && customer.customer_id) {
-          logger.info(`Triggering profile rebuild for customer ${safeNumber(customer.customer_id)}`);
-          await buildCustomerProfile(safeNumber(customer.customer_id));
-        } else {
-          logger.warn('No valid customer data found in change event');
-        }
-      }
-    });
-
-    const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
-    accountsStream.on('change', async (change) => {
-      logger.info('Account change detected:', change.operationType);
-      if (change.operationType === 'insert' || change.operationType === 'update') {
-        const account = extractDataFromCDC(change.fullDocument);
-        if (account && account.customer_id) {
-          logger.info(`Triggering profile rebuild for customer ${safeNumber(account.customer_id)} due to account change`);
-          await buildCustomerProfile(safeNumber(account.customer_id));
-        }
-      }
-    });
-
-    const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
-    transactionsStream.on('change', async (change) => {
-      logger.info('Transaction change detected:', change.operationType);
-      if (change.operationType === 'insert' || change.operationType === 'update') {
-        const tx = extractDataFromCDC(change.fullDocument);
-        if (tx && tx.account_id) {
-          const accountCDC = await db1.collection('accounts').findOne({
-            $or: [
-              { 'after.account_id': Long.fromString(safeNumber(tx.account_id).toString()) },
-              { 'after.account_id': safeNumber(tx.account_id) }
-            ]
-          });
-          const account = extractDataFromCDC(accountCDC);
-          if (account && account.customer_id) {
-            logger.info(`Triggering profile rebuild for customer ${safeNumber(account.customer_id)} due to transaction change`);
-            await buildCustomerProfile(safeNumber(account.customer_id));
+        const customersStream = db1.collection('customers').watch([], { fullDocument: 'updateLookup' });
+        customersStream.on('change', async (change) => {
+          logger.info('Customer change detected:', change.operationType);
+          logger.info('Change document:', JSON.stringify(change, null, 2));
+          
+          if (change.operationType === 'insert' || change.operationType === 'update') {
+            const customer = extractDataFromCDC(change.fullDocument);
+            if (customer && customer.customer_id) {
+              logger.info(`Triggering profile rebuild for customer ${safeNumber(customer.customer_id)}`);
+              await buildCustomerProfile(safeNumber(customer.customer_id));
+            } else {
+              logger.warn('No valid customer data found in change event');
+            }
           }
-        }
+        });
+
+        const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
+        accountsStream.on('change', async (change) => {
+          logger.info('Account change detected:', change.operationType);
+          if (change.operationType === 'insert' || change.operationType === 'update') {
+            const account = extractDataFromCDC(change.fullDocument);
+            if (account && account.customer_id) {
+              logger.info(`Triggering profile rebuild for customer ${safeNumber(account.customer_id)} due to account change`);
+              await buildCustomerProfile(safeNumber(account.customer_id));
+            }
+          }
+        });
+
+        const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
+        transactionsStream.on('change', async (change) => {
+          logger.info('Transaction change detected:', change.operationType);
+          if (change.operationType === 'insert' || change.operationType === 'update') {
+            const tx = extractDataFromCDC(change.fullDocument);
+            if (tx && tx.account_id) {
+              const accountCDC = await db1.collection('accounts').findOne({
+                $or: [
+                  { 'after.account_id': Long.fromString(safeNumber(tx.account_id).toString()) },
+                  { 'after.account_id': safeNumber(tx.account_id) }
+                ]
+              });
+              const account = extractDataFromCDC(accountCDC);
+              if (account && account.customer_id) {
+                logger.info(`Triggering profile rebuild for customer ${safeNumber(account.customer_id)} due to transaction change`);
+                await buildCustomerProfile(safeNumber(account.customer_id));
+              }
+            }
+          }
+        });
+      } catch (error) {
+        logger.error('Error setting up change streams:', error);
+      }
+    }
+
+    const app = express();
+    app.use(express.json());
+
+    app.get('/health', (req, res) => {
+      res.json({ status: 'healthy', processing: isProcessing, timestamp: new Date().toISOString() });
+    });
+
+    app.post('/profile', async (req, res) => {
+      const { customerId } = req.body;
+      if (customerId) {
+        await buildCustomerProfile(customerId);
+        res.json({ message: `Rebuilt profile for ${customerId}` });
+      } else {
+        await processAllCustomers();
+        res.json({ message: 'Started rebuilding profiles for all customers' });
       }
     });
-  } catch (error) {
-    logger.error('Error setting up change streams:', error);
-  }
-}
 
-const app = express();
-app.use(express.json());
+    app.get('/customers/:id', async (req, res) => {
+      try {
+        const db2 = cluster2Client.db('analytics');
+        const customerId = parseInt(req.params.id);
+        const doc = await db2.collection('customer_profile').findOne({ customer_id: customerId });
+        if (!doc) return res.status(404).json({ error: 'Profile not found' });
+        res.json(doc);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', processing: isProcessing, timestamp: new Date().toISOString() });
-});
+    async function start() {
+      try {
+        await initializeConnections();
+        await processAllCustomers();
+        await setupChangeStreams();
 
-app.post('/profile', async (req, res) => {
-  const { customerId } = req.body;
-  if (customerId) {
-    await buildCustomerProfile(customerId);
-    res.json({ message: `Rebuilt profile for ${customerId}` });
-  } else {
-    await processAllCustomers();
-    res.json({ message: 'Started rebuilding profiles for all customers' });
-  }
-});
+        const port = process.env.PORT || 3001;
+        app.listen(port, () => logger.info(`Customer profile service started on ${port}`));
 
-app.get('/customers/:id', async (req, res) => {
-  try {
-    const db2 = cluster2Client.db('analytics');
-    const customerId = parseInt(req.params.id);
-    const doc = await db2.collection('customer_profile').findOne({ customer_id: customerId });
-    if (!doc) return res.status(404).json({ error: 'Profile not found' });
-    res.json(doc);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+        setInterval(processAllCustomers, 10 * 60 * 1000);
+      } catch (error) {
+        logger.error('Failed to start customer profile service:', error);
+        process.exit(1);
+      }
+    }
 
-async function start() {
-  try {
-    await initializeConnections();
-    await processAllCustomers();
-    await setupChangeStreams();
+    process.on('SIGINT', async () => {
+      logger.info('Shutting down customer profile service...');
+      if (cluster1Client) await cluster1Client.close();
+      if (cluster2Client) await cluster2Client.close();
+      process.exit(0);
+    });
 
-    const port = process.env.PORT || 3001;
-    app.listen(port, () => logger.info(`Customer profile service started on ${port}`));
-
-    setInterval(processAllCustomers, 10 * 60 * 1000);
-  } catch (error) {
-    logger.error('Failed to start customer profile service:', error);
-    process.exit(1);
-  }
-}
-
-process.on('SIGINT', async () => {
-  logger.info('Shutting down customer profile service...');
-  if (cluster1Client) await cluster1Client.close();
-  if (cluster2Client) await cluster2Client.close();
-  process.exit(0);
-});
-
-start();
+    start();
