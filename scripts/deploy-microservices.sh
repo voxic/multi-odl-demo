@@ -70,22 +70,32 @@ print_status "MongoDB secrets found"
 # Deploy aggregation service
 print_status "Deploying aggregation service..."
 kubectl apply -f k8s/microservices/aggregation-service-deployment-docker.yaml -n odl-demo
+print_status "Restarting aggregation service pods to use new image..."
+kubectl rollout restart deployment/aggregation-service -n odl-demo
 
 # Deploy customer profile service
 print_status "Deploying customer profile service..."
 kubectl apply -f k8s/microservices/customer-profile-service-deployment-docker.yaml -n odl-demo
+print_status "Restarting customer profile service pods to use new image..."
+kubectl rollout restart deployment/customer-profile-service -n odl-demo
 
 # Deploy analytics UI
 print_status "Deploying analytics UI..."
 kubectl apply -f k8s/microservices/analytics-ui-deployment-docker.yaml -n odl-demo
+print_status "Restarting analytics UI pods to use new image..."
+kubectl rollout restart deployment/analytics-ui -n odl-demo
 
 # Deploy legacy UI
 print_status "Deploying legacy UI..."
 kubectl apply -f k8s/microservices/legacy-ui-deployment-docker.yaml -n odl-demo
+print_status "Restarting legacy UI pods to use new image..."
+kubectl rollout restart deployment/legacy-ui -n odl-demo
 
 # Deploy BankUI landing page
 print_status "Deploying BankUI landing page..."
 kubectl apply -f k8s/microservices/bankui-landing-deployment-docker.yaml -n odl-demo
+print_status "Restarting BankUI landing page pods to use new image..."
+kubectl rollout restart deployment/bankui-landing -n odl-demo
 
 # Wait for deployments to be ready
 print_status "Waiting for deployments to be ready..."
@@ -125,3 +135,5 @@ echo ""
 echo "🔄 To update services:"
 echo "   1. ./scripts/build-microservices.sh"
 echo "   2. ./scripts/deploy-microservices.sh"
+echo ""
+echo "ℹ️  Note: This script automatically restarts pods to use new images"
