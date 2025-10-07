@@ -123,16 +123,16 @@ sed -i.bak "s/MONGO_CLUSTER2_PASSWORD=.*/MONGO_CLUSTER2_PASSWORD=$cluster2_pass/
 rm -f "$LOCAL_CONFIG_FILE.bak"
 
 # Generate connection strings
-cluster1_uri="mongodb+srv://$cluster1_user:$cluster1_pass@$cluster1_host/$cluster1_db?retryWrites=true&w=majority"
-cluster2_uri="mongodb+srv://$cluster2_user:$cluster2_pass@$cluster2_host/$cluster2_db?retryWrites=true&w=majority"
+cluster1_uri="mongodb+srv://$cluster1_user:$cluster1_pass@$cluster1_host/$cluster1_db?w=majority&retryReads=true"
+cluster2_uri="mongodb+srv://$cluster2_user:$cluster2_pass@$cluster2_host/$cluster2_db?w=majority&retryReads=true"
 
-# Update connection strings in the file
-sed -i.bak "s|MONGO_CLUSTER1_URI=.*|MONGO_CLUSTER1_URI=$cluster1_uri|" "$LOCAL_CONFIG_FILE"
-sed -i.bak "s|MONGO_CLUSTER2_URI=.*|MONGO_CLUSTER2_URI=$cluster2_uri|" "$LOCAL_CONFIG_FILE"
-sed -i.bak "s|MONGO_PASSWORD=.*|MONGO_PASSWORD=$cluster2_pass|" "$LOCAL_CONFIG_FILE"
-
-# Remove backup file
-rm -f "$LOCAL_CONFIG_FILE.bak"
+# Update connection strings in the file using awk for better handling of special characters
+awk -v cluster1_uri="$cluster1_uri" -v cluster2_uri="$cluster2_uri" -v password="$cluster2_pass" '
+/MONGO_CLUSTER1_URI=/ { print "MONGO_CLUSTER1_URI=" cluster1_uri; next }
+/MONGO_CLUSTER2_URI=/ { print "MONGO_CLUSTER2_URI=" cluster2_uri; next }
+/MONGO_PASSWORD=/ { print "MONGO_PASSWORD=" password; next }
+{ print }
+' "$LOCAL_CONFIG_FILE" > "$LOCAL_CONFIG_FILE.tmp" && mv "$LOCAL_CONFIG_FILE.tmp" "$LOCAL_CONFIG_FILE"
 
 print_success "Configuration saved to $LOCAL_CONFIG_FILE"
 echo ""

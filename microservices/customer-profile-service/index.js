@@ -17,8 +17,8 @@ const logger = winston.createLogger({
 });
 
 // MongoDB connection strings
-const CLUSTER1_URI = process.env.CLUSTER1_URI || 'mongodb+srv://odl-reader:password@cluster1.mongodb.net/banking?retryWrites=true&w=majority';
-const CLUSTER2_URI = process.env.CLUSTER2_URI || 'mongodb+srv://odl-writer:password@cluster2.mongodb.net/analytics?retryWrites=true&w=majority';
+const CLUSTER1_URI = process.env.CLUSTER1_URI || 'mongodb+srv://odl-reader:password@cluster1.mongodb.net/banking?w=majority&retryReads=true';
+const CLUSTER2_URI = process.env.CLUSTER2_URI || 'mongodb+srv://odl-writer:password@cluster2.mongodb.net/analytics?w=majority&retryReads=true';
 
 let cluster1Client, cluster2Client;
 let isProcessing = false;

@@ -4,7 +4,7 @@
     "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
     "tasks.max": "1",
     "topics": "mysql.inventory.customers,mysql.inventory.accounts,mysql.inventory.transactions,mysql.inventory.agreements",
-    "connection.uri": "mongodb+srv://odl-writer:${env:MONGO_PASSWORD}@cluster1.mongodb.net/banking?retryWrites=true&w=majority",
+    "connection.uri": "mongodb+srv://odl-writer:${env:MONGO_PASSWORD}@cluster1.mongodb.net/banking?w=majority&retryReads=true",
     "database": "banking",
     "collection": "customers",
     "topic.override.mysql.inventory.customers.collection": "customers",
