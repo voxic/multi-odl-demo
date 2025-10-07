@@ -88,6 +88,18 @@ cd "$PROJECT_ROOT"
 
 # Load images into MicroK8s (if using MicroK8s)
 if command -v microk8s &> /dev/null; then
+    print_status "Cleaning up old MicroK8s images..."
+    
+    # Remove old images (optional - will fail silently if images don't exist)
+    microk8s ctr images rm docker.io/library/aggregation-service:latest 2>/dev/null || true
+    microk8s ctr images rm docker.io/library/customer-profile-service:latest 2>/dev/null || true
+    microk8s ctr images rm docker.io/library/analytics-ui:latest 2>/dev/null || true
+    microk8s ctr images rm docker.io/library/legacy-ui:latest 2>/dev/null || true
+    microk8s ctr images rm docker.io/library/bankui-landing:latest 2>/dev/null || true
+    
+    # Also prune any other unused images
+    microk8s ctr images prune 2>/dev/null || true
+    
     print_status "Loading images into MicroK8s..."
     
     # Create temporary directory for image files
