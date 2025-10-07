@@ -81,13 +81,50 @@ kubectl get services -n odl-demo
 - `microservices/analytics-ui/Dockerfile`
 - `microservices/legacy-ui/Dockerfile`
 
-## Development Workflow
+## Remote Deployment Options
 
-### Making Changes
+### Option 1: Docker Required (Recommended)
+**Requirements**: Docker installed on remote machine
+```bash
+# On remote machine
+./scripts/deploy-hostnetwork.sh
+```
 
-1. **Edit source code** in `microservices/*/`
-2. **Rebuild images**: `./scripts/build-microservices.sh`
-3. **Redeploy**: `./scripts/deploy-microservices.sh`
+### Option 2: Hybrid Deployment
+**Requirements**: Docker on local machine, SSH access to remote
+```bash
+# From local machine
+./scripts/deploy-hybrid.sh <remote-host> [remote-user]
+```
+
+### Option 3: No Docker Required (Fallback)
+**Requirements**: Only MicroK8s on remote machine
+```bash
+# From local machine
+./scripts/deploy-remote-configmap.sh <remote-host> [remote-user]
+```
+
+## Docker Installation Requirements
+
+### For Remote Machine (Option 1)
+```bash
+# Install Docker on Ubuntu 24.04
+sudo apt update
+sudo apt install -y docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Verify installation
+docker --version
+docker run hello-world
+```
+
+### For Local Machine (Option 2)
+- Docker Desktop or Docker Engine
+- SSH key access to remote machine
+- Project files on local machine
 
 ### Adding New Microservices
 
