@@ -388,8 +388,9 @@ async function setupChangeStreams() {
       logger.info('Customer change detected:', change.operationType);
       logger.info('Change document:', JSON.stringify(change, null, 2));
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const customer = extractDataFromCDC(change.fullDocument);
-        logger.info('Extracted customer data:', JSON.stringify(customer, null, 2));
+        // For MongoDB change streams, the data is directly in fullDocument
+        const customer = change.fullDocument;
+        logger.info('Customer data from change stream:', JSON.stringify(customer, null, 2));
         if (customer && customer.customer_id) {
           const customerId = safeNumber(customer.customer_id);
           logger.info(`Triggering aggregation for customer ${customerId} due to customer change`);
@@ -404,8 +405,11 @@ async function setupChangeStreams() {
     const accountsStream = db1.collection('accounts').watch([], { fullDocument: 'updateLookup' });
     accountsStream.on('change', async (change) => {
       logger.info('Account change detected:', change.operationType);
+      logger.info('Account change document:', JSON.stringify(change, null, 2));
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const account = extractDataFromCDC(change.fullDocument);
+        // For MongoDB change streams, the data is directly in fullDocument
+        const account = change.fullDocument;
+        logger.info('Account data from change stream:', JSON.stringify(account, null, 2));
         if (account && account.customer_id) {
           const customerId = safeNumber(account.customer_id);
           logger.info(`Triggering aggregation for customer ${customerId} due to account change`);
@@ -418,8 +422,11 @@ async function setupChangeStreams() {
     const agreementsStream = db1.collection('agreements').watch([], { fullDocument: 'updateLookup' });
     agreementsStream.on('change', async (change) => {
       logger.info('Agreement change detected:', change.operationType);
+      logger.info('Agreement change document:', JSON.stringify(change, null, 2));
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const agreement = extractDataFromCDC(change.fullDocument);
+        // For MongoDB change streams, the data is directly in fullDocument
+        const agreement = change.fullDocument;
+        logger.info('Agreement data from change stream:', JSON.stringify(agreement, null, 2));
         if (agreement && agreement.customer_id) {
           const customerId = safeNumber(agreement.customer_id);
           logger.info(`Triggering aggregation for customer ${customerId} due to agreement change`);
@@ -432,23 +439,22 @@ async function setupChangeStreams() {
     const transactionsStream = db1.collection('transactions').watch([], { fullDocument: 'updateLookup' });
     transactionsStream.on('change', async (change) => {
       logger.info('Transaction change detected:', change.operationType);
+      logger.info('Transaction change document:', JSON.stringify(change, null, 2));
       if (change.operationType === 'insert' || change.operationType === 'update') {
-        const transaction = extractDataFromCDC(change.fullDocument);
+        // For MongoDB change streams, the data is directly in fullDocument
+        const transaction = change.fullDocument;
+        logger.info('Transaction data from change stream:', JSON.stringify(transaction, null, 2));
         if (transaction && transaction.account_id) {
-          // Find the customer for this account
-          const accountCDC = await db1.collection('accounts').findOne({ 
-            $or: [
-              { 'after.account_id': Long.fromString(transaction.account_id.toString()) },
-              { 'after.account_id': safeNumber(transaction.account_id) }
-            ]
+          // Find the account to get the customer_id
+          const account = await db1.collection('accounts').findOne({ 
+            account_id: safeNumber(transaction.account_id)
           });
-          if (accountCDC) {
-            const account = extractDataFromCDC(accountCDC);
-            if (account && account.customer_id) {
-              const customerId = safeNumber(account.customer_id);
-              logger.info(`Triggering aggregation for customer ${customerId} due to transaction change`);
-              await aggregateCustomerData(customerId);
-            }
+          if (account && account.customer_id) {
+            const customerId = safeNumber(account.customer_id);
+            logger.info(`Triggering aggregation for customer ${customerId} due to transaction change`);
+            await aggregateCustomerData(customerId);
+          } else {
+            logger.warn(`Could not find account ${transaction.account_id} for transaction`);
           }
         }
       }
