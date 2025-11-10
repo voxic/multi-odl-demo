@@ -1,0 +1,25 @@
+{
+  "name": "mongodb-source-cluster1-agreements",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSourceConnector",
+    "tasks.max": "1",
+    "connection.uri": "mongodb+srv://odl-reader:YOUR_PASSWORD_HERE@cluster1.mongodb.net/banking?w=majority&retryReads=true",
+    "database": "banking",
+    "collection": "agreements",
+    "topic.prefix": "",
+    "topic.suffix": "",
+    "topic.namespace.map": "{\"banking.agreements\":\"customer-agreement-events\"}",
+    "publish.full.document.only": "true",
+    "change.stream.full.document": "updateLookup",
+    "output.format.value": "json",
+    "output.format.key": "json",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true"
+  }
+}
+

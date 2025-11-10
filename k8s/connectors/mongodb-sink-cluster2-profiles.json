@@ -1,0 +1,21 @@
+{
+  "name": "mongodb-sink-cluster2-profiles",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "tasks.max": "1",
+    "topics": "customer-agreement-profiles",
+    "connection.uri": "mongodb+srv://odl-writer:YOUR_PASSWORD_HERE@cluster2.mongodb.net/analytics?w=majority&retryReads=true",
+    "database": "analytics",
+    "collection": "customer_agreement_profiles",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "document.id.strategy": "com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy",
+    "document.id.strategy.partial.value.projection.type": "AllowList",
+    "document.id.strategy.partial.value.projection.list": "customerId",
+    "writemodel.strategy": "com.mongodb.kafka.connect.sink.writemodel.strategy.ReplaceOneBusinessKeyStrategy",
+    "writemodel.strategy.replace.one.business.key.fields": "customerId"
+  }
+}
+

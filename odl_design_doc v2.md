@@ -231,12 +231,16 @@ topics:
   - mysql.inventory.accounts  
   - mysql.inventory.transactions
   - mysql.inventory.agreements
+  - customer-agreement-events (MongoDB source connector output)
+  - customer-agreement-profiles (Java service output)
   - atlas-cluster1-updates
   - atlas-cluster2-analytics
 
 # Kafka Connect Configuration
 - Source: Debezium MySQL Connector
-- Sink: MongoDB Atlas Kafka Connector
+- Source: MongoDB Source Connector (Cluster 1 agreements → customer-agreement-events)
+- Sink: MongoDB Atlas Kafka Connector (MySQL topics → Cluster 1)
+- Sink: MongoDB Atlas Kafka Connector (customer-agreement-profiles → Cluster 2)
 - Partitions: 3 per topic
 - Replication Factor: 1 (demo environment)
 ```
@@ -267,6 +271,16 @@ Atlas Cluster 1 → Change Streams → Node.js Microservices → Atlas Cluster 2
 - Computed analytics fields
 ```
 
+#### Stage 4: Atlas Cluster 1 → Kafka → Java Spring Service → Kafka → Atlas Cluster 2
+```
+Atlas Cluster 1 → MongoDB Source Connector → Kafka (customer-agreement-events)
+→ Java Spring Boot Agreement Profile Service → Kafka (customer-agreement-profiles)
+→ MongoDB Sink Connector → Atlas Cluster 2
+- Real-time agreement-focused customer profile building
+- Event-driven architecture with Kafka
+- Complete agreement information aggregation
+```
+
 ### Simplified Microservices Design
 
 #### Single Aggregation Service (MVP)
@@ -283,6 +297,27 @@ const aggregateCustomerData = async (customer) => {
 };
 ```
 
+#### Agreement Profile Service (Java Spring Boot)
+```java
+// Purpose: Build complete customer profiles with focus on agreements
+// Input: Kafka events from customer-agreement-events topic (MongoDB source connector)
+// Output: Kafka events to customer-agreement-profiles topic (MongoDB sink connector)
+
+@Service
+public class AgreementProfileService {
+    public CustomerAgreementProfile buildCustomerAgreementProfile(Long customerId) {
+        // Fetch customer information from Cluster 1
+        // Fetch all agreements for the customer
+        // Build comprehensive agreement profile with:
+        //   - Customer information
+        //   - All agreement details
+        //   - Agreement summary (totals, active, completed, defaulted)
+        //   - Financial metrics
+        // Publish to Kafka output topic
+    }
+}
+```
+
 ## Deployment Strategy
 
 ### Minimal Kubernetes Manifests Structure
@@ -294,7 +329,10 @@ k8s/
 ├── kafka/
 │   ├── kafka-all-in-one.yaml (zookeeper + kafka + connect)
 └── microservices/
-    └── aggregation-service/
+    ├── aggregation-service/
+    │   ├── deployment.yaml
+    │   └── service.yaml
+    └── agreement-profile-service/
         ├── deployment.yaml
         └── service.yaml
 ```
@@ -332,6 +370,7 @@ Configuration:
 
 Collections:
   - customer_analytics (computed profiles)
+  - customer_agreement_profiles (agreement-focused profiles from Java service)
   - account_metrics (aggregated data)
   - transaction_patterns (ML insights)
 ```
@@ -356,6 +395,13 @@ Collections:
 - [ ] Implement basic aggregation Atlas Cluster 1 → Cluster 2
 - [ ] End-to-end validation
 - [ ] Demo preparation
+
+### Phase 4: Agreement Profile Service (Additional - 2 hours)
+- [ ] Deploy MongoDB source connector for agreements (Cluster 1 → Kafka)
+- [ ] Build and deploy Java Spring Boot agreement profile service
+- [ ] Deploy MongoDB sink connector (Kafka → Cluster 2)
+- [ ] Test end-to-end Kafka-based flow
+- [ ] Validate agreement profiles in Cluster 2
 
 ## Sample Data Generation
 
