@@ -73,11 +73,14 @@ REQUIRED_FILES=(
     "k8s/kafka/kafka-connect-hostnetwork.yaml"
     "k8s/microservices/aggregation-service-deployment-docker.yaml"
     "k8s/microservices/customer-profile-service-deployment-docker.yaml"
+    "k8s/microservices/agreement-profile-service-deployment-docker.yaml"
     "k8s/microservices/legacy-ui-deployment-docker.yaml"
     "k8s/microservices/analytics-ui-deployment-docker.yaml"
     "k8s/microservices/bankui-landing-deployment-docker.yaml"
     "k8s/connectors/debezium-mysql-connector-hostnetwork.json"
     "k8s/connectors/mongodb-atlas-connector.json"
+    "k8s/connectors/mongodb-source-cluster1-agreements.json"
+    "k8s/connectors/mongodb-sink-cluster2-profiles.json"
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
@@ -187,6 +190,21 @@ if ! kubectl wait --for=condition=available --timeout=300s deployment/customer-p
     kubectl get pods -n odl-demo -l app=customer-profile-service
     print_status "Customer Profile service pod logs:"
     kubectl logs -n odl-demo -l app=customer-profile-service --tail=50
+    exit 1
+fi
+
+# Deploy Agreement Profile service
+print_status "Deploying Agreement Profile service..."
+kubectl apply -f k8s/microservices/agreement-profile-service-deployment-docker.yaml -n odl-demo
+
+# Wait for Agreement Profile service to be ready
+print_status "Waiting for Agreement Profile service to be ready..."
+if ! kubectl wait --for=condition=available --timeout=300s deployment/agreement-profile-service -n odl-demo; then
+    print_error "Agreement Profile service deployment failed to become available"
+    print_status "Agreement Profile service pod status:"
+    kubectl get pods -n odl-demo -l app=agreement-profile-service
+    print_status "Agreement Profile service pod logs:"
+    kubectl logs -n odl-demo -l app=agreement-profile-service --tail=50
     exit 1
 fi
 
@@ -302,6 +320,82 @@ kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: ap
 # Clean up temporary file
 rm -f "$TEMP_CONNECTOR_FILE"
 
+# Deploy MongoDB Source Connector for agreements (Cluster 1 → Kafka)
+print_status "Deploying MongoDB Source Connector for agreements..."
+
+# Create a temporary connector configuration with the actual connection string
+TEMP_SOURCE_CONNECTOR_FILE="/tmp/mongodb-source-agreements-temp.json"
+cat > "$TEMP_SOURCE_CONNECTOR_FILE" << EOF
+{
+  "name": "mongodb-source-cluster1-agreements",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSourceConnector",
+    "tasks.max": "1",
+    "connection.uri": "$MONGO_CLUSTER1_URI",
+    "database": "banking",
+    "collection": "agreements",
+    "topic.prefix": "",
+    "topic.suffix": "",
+    "topic.namespace.map": "{\"banking.agreements\":\"customer-agreement-events\"}",
+    "publish.full.document.only": "true",
+    "change.stream.full.document": "updateLookup",
+    "output.format.value": "json",
+    "output.format.key": "json",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true"
+  }
+}
+EOF
+
+kubectl cp "$TEMP_SOURCE_CONNECTOR_FILE" odl-demo/$KAFKA_CONNECT_POD:/tmp/mongodb-source-agreements.json
+kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: application/json" \
+  --data @/tmp/mongodb-source-agreements.json \
+  http://localhost:8083/connectors || print_warning "Failed to deploy MongoDB Source connector (may already exist)"
+
+# Clean up temporary file
+rm -f "$TEMP_SOURCE_CONNECTOR_FILE"
+
+# Deploy MongoDB Sink Connector for profiles (Kafka → Cluster 2)
+print_status "Deploying MongoDB Sink Connector for agreement profiles..."
+
+# Create a temporary connector configuration with the actual connection string
+TEMP_SINK_CONNECTOR_FILE="/tmp/mongodb-sink-profiles-temp.json"
+cat > "$TEMP_SINK_CONNECTOR_FILE" << EOF
+{
+  "name": "mongodb-sink-cluster2-profiles",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "tasks.max": "1",
+    "topics": "customer-agreement-profiles",
+    "connection.uri": "$MONGO_CLUSTER2_URI",
+    "database": "analytics",
+    "collection": "customer_agreement_profiles",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "document.id.strategy": "com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy",
+    "document.id.strategy.partial.value.projection.type": "AllowList",
+    "document.id.strategy.partial.value.projection.list": "customerId",
+    "writemodel.strategy": "com.mongodb.kafka.connect.sink.writemodel.strategy.ReplaceOneBusinessKeyStrategy",
+    "writemodel.strategy.replace.one.business.key.fields": "customerId"
+  }
+}
+EOF
+
+kubectl cp "$TEMP_SINK_CONNECTOR_FILE" odl-demo/$KAFKA_CONNECT_POD:/tmp/mongodb-sink-profiles.json
+kubectl exec -n odl-demo $KAFKA_CONNECT_POD -- curl -X POST -H "Content-Type: application/json" \
+  --data @/tmp/mongodb-sink-profiles.json \
+  http://localhost:8083/connectors || print_warning "Failed to deploy MongoDB Sink connector (may already exist)"
+
+# Clean up temporary file
+rm -f "$TEMP_SINK_CONNECTOR_FILE"
+
 
 print_status "🎉 Deployment completed successfully!"
 
@@ -338,6 +432,7 @@ echo ""
 print_status "Port Forwarding (for other services):"
 echo "[$(get_timestamp)] Aggregation Service: kubectl port-forward service/aggregation-service 3000:3000 -n odl-demo"
 echo "[$(get_timestamp)] Customer Profile Service: kubectl port-forward service/customer-profile-service 3001:3001 -n odl-demo"
+echo "[$(get_timestamp)] Agreement Profile Service: kubectl port-forward service/agreement-profile-service 3005:3005 -n odl-demo"
 
 echo ""
 print_status "To check the status of all pods:"
@@ -347,3 +442,4 @@ echo ""
 print_status "To view logs:"
 echo "[$(get_timestamp)] kubectl logs -f deployment/aggregation-service -n odl-demo"
 echo "[$(get_timestamp)] kubectl logs -f deployment/customer-profile-service -n odl-demo"
+echo "[$(get_timestamp)] kubectl logs -f deployment/agreement-profile-service -n odl-demo"

@@ -83,6 +83,12 @@ cd ../bankui-landing
 docker build -t bankui-landing:latest .
 print_success "BankUI landing page image built"
 
+# Build Agreement Profile Service (Java Spring Boot)
+print_status "Building Agreement Profile Service..."
+cd ../agreement-profile-service
+docker build -t agreement-profile-service:latest .
+print_success "Agreement Profile Service image built"
+
 # Go back to project root
 cd "$PROJECT_ROOT"
 
@@ -96,6 +102,7 @@ if command -v microk8s &> /dev/null; then
     microk8s ctr images rm docker.io/library/analytics-ui:latest 2>/dev/null || true
     microk8s ctr images rm docker.io/library/legacy-ui:latest 2>/dev/null || true
     microk8s ctr images rm docker.io/library/bankui-landing:latest 2>/dev/null || true
+    microk8s ctr images rm docker.io/library/agreement-profile-service:latest 2>/dev/null || true
     
     # Also prune any other unused images
     microk8s ctr images prune 2>/dev/null || true
@@ -126,6 +133,10 @@ if command -v microk8s &> /dev/null; then
     print_status "Saving BankUI landing page image..."
     docker save bankui-landing:latest > "$TEMP_DIR/bankui-landing.tar"
     microk8s ctr images import "$TEMP_DIR/bankui-landing.tar"
+    
+    print_status "Saving Agreement Profile Service image..."
+    docker save agreement-profile-service:latest > "$TEMP_DIR/agreement-profile-service.tar"
+    microk8s ctr images import "$TEMP_DIR/agreement-profile-service.tar"
     
     print_success "Images loaded into MicroK8s"
 else

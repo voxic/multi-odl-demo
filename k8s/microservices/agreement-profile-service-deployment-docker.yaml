@@ -15,13 +15,17 @@ spec:
       labels:
         app: agreement-profile-service
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: agreement-profile-service
         image: agreement-profile-service:latest
         imagePullPolicy: Never
         ports:
-        - containerPort: 3002
+        - containerPort: 3005
+          hostPort: 3005
           name: http
+          protocol: TCP
         env:
         - name: CLUSTER1_URI
           valueFrom:
@@ -42,14 +46,14 @@ spec:
         livenessProbe:
           httpGet:
             path: /actuator/health
-            port: 3002
+            port: 3005
           initialDelaySeconds: 60
           periodSeconds: 10
           timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /actuator/health
-            port: 3002
+            port: 3005
           initialDelaySeconds: 30
           periodSeconds: 5
           timeoutSeconds: 3
@@ -66,7 +70,7 @@ spec:
     app: agreement-profile-service
   ports:
   - name: http
-    port: 3002
-    targetPort: 3002
+    port: 3005
+    targetPort: 3005
   type: ClusterIP
 
